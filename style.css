@@ -553,15 +553,6 @@ body {
   letter-spacing: 1px;
 }
 
-/* ====== 页脚 ====== */
-.footer {
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 22px 24px 30px;
-  text-align: center;
-  color: var(--text-dim);
-  font-size: 13px;
-}
-
 /* ====== 视图切换标签 ====== */
 .view-tabs {
   position: sticky;

@@ -109,6 +109,153 @@
     "image": "images/encoder-decoder.png"
   },
   {
+    "id": "residual-norm",
+    "category": "大模型基础",
+    "name": "残差连接与层归一化",
+    "summary": "让百层网络训练得动的两大功臣：残差修高速公路，归一化稳住数值。",
+    "description": "残差连接（Residual Connection）把每个子层的输出改为『输入 + 子层变换』，即 output = x + SubLayer(x)——网络学的不再是全新的表示，而是对输入的『修正量』，梯度因此可以沿着加法捷径无衰减地流回浅层。层归一化（LayerNorm）把每个 token 的表示向量拉回稳定的均值和方差，防止深层堆叠时数值漂移。Transformer 里每个注意力层和 FFN 层都配这对组合，是深层网络能训练的工程前提。",
+    "analogy": "残差像登山的安全索道：不管你在岩壁上怎么折腾，总有一条捷径能回到出发点的位置再叠加成果；层归一化像每个营地的体检站——无论上一段路把你的状态搞得多混乱，进站统一调整到标准体征再出发。",
+    "background": "残差连接 2015 年由何恺明在 ResNet 中提出，一举解决了『网络越深效果反而越差』的退化问题，让百层、千层网络成为可能，ResNet 拿了 CVPR 2016 最佳论文。层归一化 2016 年提出，解决 BatchNorm 在变长序列上统计不稳定的问题。有趣的是原版 Transformer 用的是 Post-LN（归一化在残差之后），训练深层模型不稳，后来 GPT/LLaMA 系全部改用 Pre-LN（归一化放在子层之前）加 RMSNorm（LayerNorm 的减法简化版，去掉均值中心化，更快），这是『论文原版』和『现代实践』的著名差异之一。",
+    "problem": "解决两个深层网络的死穴：没有残差，梯度在反向传播中层层衰减（梯度消失），56 层网络的实际训练效果反而不如 20 层；没有归一化，几十层叠加后数值要么爆炸要么消失，损失函数剧烈震荡根本收敛不了。",
+    "points": [
+      "残差的本质是学『增量』：子层只需要学习对当前表示的修正，学不到东西时输出恒等映射即可，最差也不会变差",
+      "Pre-LN（现代主流）比 Post-LN（原版论文）训练更稳定，但理论上 Post-LN 效果上限略高——稳定与上限的取舍",
+      "RMSNorm = LayerNorm 去掉均值减法只保留方差缩放，计算省 10% 左右，LLaMA 系全面采用"
+    ],
+    "pitfalls": [
+      "以为网络越深越好——没有残差连接时加深网络是灾难，效果先升后剧烈下降",
+      "把 BatchNorm 和 LayerNorm 混为一谈——前者沿 batch 维度归一化（适合固定尺寸图像），后者沿特征维度（适合变长序列），NLP 里用错会训练崩溃"
+    ],
+    "applications": [
+      "所有 Transformer：GPT/LLaMA/DeepSeek 每个子层都带残差+归一化",
+      "ResNet 系列：图像识别的基石，残差思想的发源地",
+      "扩散模型（Stable Diffusion 的 U-Net）：同样依赖残差块堆叠"
+    ],
+    "example": {
+      "scenario": "把一个 100 层的 Transformer 去掉所有残差连接再训练：损失在第 3 层后就不再下降——梯度传不到浅层，浅层参数永远不更新。加回残差后，即使 100 层也能正常收敛，这就是 ChatGPT 有 96 层的原因。",
+      "code": "import torch, torch.nn as nn\n\n# 现代风格的 Transformer 子层（Pre-LN + 残差）\nclass Block(nn.Module):\n    def __init__(self, d=512, heads=8):\n        super().__init__()\n        self.norm1 = nn.RMSNorm(d)          # RMSNorm：LayerNorm 简化版\n        self.attn = nn.MultiheadAttention(d, heads, batch_first=True)\n        self.norm2 = nn.RMSNorm(d)\n        self.ffn = nn.Sequential(nn.Linear(d, d*4),\n                                 nn.GELU(), nn.Linear(d*4, d))\n\n    def forward(self, x):\n        x = x + self.attn(self.norm1(x), self.norm1(x),\n                          self.norm1(x))[0]  # 残差：输出 = x + 修正量\n        x = x + self.ffn(self.norm2(x))      # 残差再叠一层\n        return x"
+    },
+    "related": [
+      "transformer",
+      "ffn",
+      "self-attention",
+      "flash-attention"
+    ],
+    "extended": "进阶方向：Pre-LN vs Post-LN 的稳定性分析（Xiong et al. 2020）、RMSNorm 论文、DeepNorm（把层数推到 1000 层）",
+    "image": "images/residual-norm.png"
+  },
+  {
+    "id": "positional-encoding",
+    "category": "大模型基础",
+    "name": "位置编码与 RoPE",
+    "summary": "自注意力天生看不见顺序，位置编码负责告诉模型每个词站在第几位。",
+    "description": "注意力机制对输入顺序完全无感（置换不变性）——打乱句子顺序，注意力输出完全一样。位置编码通过给每个位置的向量注入独特的『位置签名』解决这个问题。方案演进三代：原版 Transformer 用正弦函数（sin/cos 不同频率，无需训练、可外推）；BERT/GPT-1 用可学习位置向量（简单但长度固定）；现代主流（LLaMA、Qwen、DeepSeek）用旋转位置编码 RoPE——通过把 Q/K 向量在二维平面上旋转与位置成正比的角度，让注意力分数天然只依赖两词的相对距离。",
+    "analogy": "像给盲人模特发座位号：模特（词向量）本身长得一样，但手里举着不同的号码牌（位置编码），观众（注意力）才能分清谁先谁后。RoPE 更妙——它像把词放在旋转的表盘上，两个词的『指针夹角』直接就是它们的距离。",
+    "background": "原版论文用正弦/余弦编码，并留了一句著名的注脚：选它是因为可能允许外推到更长序列。2018 年后 GPT 系改用可学习位置 embedding（上限固定，GPT-3 卡死 2048）。2021 年 RoPE（Rotary Position Embedding，苏剑林提出）横空出世，凭『相对位置+可外推+实现简单』成为开源模型事实标准。2023 年 Meta 的 Llama 也采用 RoPE 并配合 NTK-aware 缩放把 2K 扩到 32K+，长上下文竞赛的技术底座就是它。",
+    "problem": "解决『语序决定语义但注意力看不见语序』的矛盾：『猫追狗』和『狗追猫』的词集合完全相同，必须靠位置信息区分谁追谁。同时还要回答第二个问题：训练时只见过 4K 位置，推理时来了 32K 的输入怎么办——这决定了模型的上下文窗口上限。",
+    "points": [
+      "三代方案：正弦编码（可外推但难训练）→ 可学习向量（好训但固定长度）→ RoPE（相对位置+可扩展，当前主流）",
+      "RoPE 只旋转 Q 和 K，不动 V——因为注意力分数由 Q·K 决定，位置信息只需要影响打分",
+      "长上下文扩展三板斧：位置插值（PI）、NTK-aware 缩放、YaRN——本质都是压缩角度让旧位置编码覆盖新长度"
+    ],
+    "pitfalls": [
+      "以为位置编码是『加在注意力层』——它加在输入 embedding 上（或旋转在 Q/K 上），每个子层并不重复加",
+      "以为窗口上限只是显存问题——就算显存够，超出训练过的位置范围模型也会输出混乱，这是位置编码的外推极限",
+      "混淆绝对位置和相对位置：RoPE 的精髓是注意力分数只依赖两词距离，而不是各自的下标"
+    ],
+    "applications": [
+      "长上下文扩展：LLaMA/Qwen/DeepSeek 靠 RoPE+插值把窗口从 4K 推到 128K 甚至 1M",
+      "代码长文件理解：超出训练位置的文件会让模型『读完就忘』，IDE 场景要做位置重排",
+      "语音/视频：时间维度的位置编码设计是多模态建模的关键"
+    ],
+    "example": {
+      "scenario": "问模型『重复这句话 100 遍』，当句子接近训练窗口边界时模型开始胡言乱语——不是注意力不够用，而是位置编码超纲了。用位置插值把训练过的 4K 个位置『压缩映射』到 32K 范围后，同样的模型稳定处理 32K 输入。",
+      "code": "import torch\n\ndef rope_rotate(x, pos):\n    '''RoPE 核心：把向量按位置旋转。x: (seq, d)，d 需为偶数'''\n    d = x.shape[-1]\n    inv_freq = 1.0 / (10000 ** (torch.arange(0, d, 2) / d))\n    angles = pos[:, None] * inv_freq[None, :]      # 每位置每维的角度\n    cos, sin = angles.cos().repeat(2, 1), angles.sin().repeat(2, 1)\n    x_rot = torch.stack([-x[..., 1::2], x[..., ::2]], -1)\n    x_rot = x_rot.reshape(x.shape)\n    return x * cos + x_rot * sin                   # 旋转后的向量\n\nq = torch.randn(8, 64)                 # 8个词的 Query\npos = torch.arange(8)                  # 位置 0~7\nq_pe = rope_rotate(q, pos)\n# 关键性质：q_pe[5]·q_pe[7] 只依赖 7-5=2 这个相对距离\n# 交换两个词的位置，注意力分数按相对位置正确变化"
+    },
+    "related": [
+      "transformer",
+      "context-window",
+      "self-attention",
+      "attention-is-all-you-need"
+    ],
+    "extended": "进阶方向：RoFormer 原论文、YaRN 长度扩展、ALiBi（用线性惩罚替代旋转）、位置编码外推能力评测（RULER）",
+    "image": "images/positional-encoding.png"
+  },
+  {
+    "id": "multi-head-attention",
+    "category": "大模型基础",
+    "name": "多头注意力",
+    "summary": "把 512 维切成 8 个 64 维并行做注意力——总成本不变，理解视角翻 8 倍。",
+    "description": "多头注意力（Multi-Head Attention, MHA）把模型宽度切成 h 份，每头在低维子空间独立做一遍『打分-加权』，最后拼接融合。一组注意力只能学一种关联模式，8 个头可以分工：有的头盯相邻词管短语，有的头跟动词管语法，有的头做长距离指代。由于每头维度缩小（512÷8=64），总计算量与单头大注意力几乎相同——用同样的钱买了 8 个视角。",
+    "analogy": "像一支评审团看同一份标书：8 位专家各带各的评分表（独立的 Q/K/V 投影），有人专挑技术漏洞、有人只看报价、有人盯资质合规，最后主席（拼接+输出投影）把 8 份意见汇总成结论。总工时没变（每人只看 1/8 的维度），视角却全面得多。",
+    "background": "多头设计来自原版 Transformer 论文，h=8、每头 64 维成为经典配置。此后的演进全部围绕『推理时省显存』：GQA（Grouped-Query Attention，LLaMA-2/3 采用）让多个 Q 头共享一组 K/V 头，KV Cache 缩小 8 倍；MQA（Multi-Query）更激进只留 1 组；MLA（DeepSeek-V3 的 Multi-head Latent Attention）把 KV 压缩到低秩隐空间，效果和显存兼得——这是 DeepSeek 便宜的重要技术原因之一。",
+    "problem": "解决『一种注意力打分学不全多种关系』的问题：指代消解、语法结构、语义相似是不同类型的关联，一组 Q/K/V 的打分空间装不下。同时多头切分还带来意外收获：每头 64 维的低维空间泛化更好。",
+    "points": [
+      "多头几乎零成本：8 头 × 64 维的计算量 ≈ 1 头 × 512 维，因为矩阵乘法总量相同",
+      "推理瓶颈在 KV Cache 而不是计算：GQA/MQA/MLA 的演进都是为了缩小 KV 显存占用",
+      "头数不是越多越好：论文实验显示 8~16 头饱和，太多头会稀释每头的表达能力"
+    ],
+    "pitfalls": [
+      "以为多头=多倍计算——切分维度后总量近似不变，这是多头设计的精髓",
+      "以为每个头严格分工可解释——事后看确实有头呈现清晰模式，但训练时并没有显式监督，不能强行指定某头管某事",
+      "忽略推理时 KV 头数才是关键——训练快慢看计算，推理吞吐看 KV Cache 大小"
+    ],
+    "applications": [
+      "所有 Transformer 的标配组件（编码器自注意力/解码器掩码注意力/交叉注意力都是多头版）",
+      "推理服务优化：vLLM 的 PagedAttention 配合 GQA，把单卡并发翻倍",
+      "视觉 ViT：图像切块后同样用多头注意力建模块与块的关系"
+    ],
+    "example": {
+      "scenario": "处理『小明把书给了小红，因为她想看』：第 3 号头的注意力热力图显示『她』强烈指向『小红』（指代消解头），第 6 号头让『给了』同时关注『小明』和『书』（动宾结构头）——两种关系被不同的头分别捕获后融合。",
+      "code": "import torch, torch.nn as nn\n\nmha = nn.MultiheadAttention(embed_dim=512, num_heads=8,\n                            batch_first=True)\nx = torch.randn(1, 10, 512)              # 10个词\nout, attn_weights = mha(x, x, x)\nprint(out.shape)        # (1, 10, 512) 融合后的表示\nprint(attn_weights.shape)  # (1, 8, 10, 10) 8个头各自的注意力热力图\n\n# GQA 省显存：8 个 Q 头共享 2 组 KV\n# KV Cache 显存从 8 组降到 2 组 -> 推理并发显著提升"
+    },
+    "related": [
+      "self-attention",
+      "kv-cache",
+      "transformer",
+      "residual-norm"
+    ],
+    "extended": "进阶方向：GQA/MQA/MLA 论文对比、注意力头可解释性研究（induction heads）、FlashAttention 与多头的配合",
+    "image": "images/multi-head-attention.png"
+  },
+  {
+    "id": "ffn",
+    "category": "大模型基础",
+    "name": "前馈网络与激活函数",
+    "summary": "注意力负责『交流』，FFN 负责『消化』——模型参数的 2/3 都在这个模块里。",
+    "description": "前馈网络（Feed-Forward Network, FFN）是 Transformer 每层中注意力之后的模块：两层全连接先升维（512→2048）过激活函数再降维（2048→512），对每个位置独立且相同地加工。现代共识认为 FFN 是模型的『知识仓库』——事实性知识（北京是中国的首都）主要存储在 FFN 的权重里，注意力只负责搬运信息。激活函数也从 ReLU 演进到 GELU，再到现代主流 SwiGLU（带门控，效果更好，代价是把升维比调成 8/3 保持参数量不变）。",
+    "analogy": "圆桌会议（注意力）结束后的独立作业：每个词回到自己房间，把会议上学到的东西放进自己的知识库（FFN 权重）里查证、补充、加工，再带着加工结果参加下一轮会议。会议管信息交换，房间管深度消化。",
+    "background": "FFN 结构继承自 90 年代的神经网络（两层 MLP），原版论文用 ReLU 激活、升维 4 倍。2018 年 GPT/BERT 时代换 GELU（更平滑）；2021 年 PaLM/LLaMA 引入 SwiGLU（来自 2019 年 GLU 系列论文）：两个投影矩阵相乘做门控，实验显示同参数量下效果稳定更好——LLaMA 把升维比从 4 调成 8/3 就是为了让 SwiGLU 的三矩阵参数量和传统 FFN 对齐。2022 年起『FFN 是键值记忆库』的知识编辑研究（ROME/MEMIT）证实了知识存储假说。",
+    "problem": "解决『注意力只会加权融合、没有非线性加工能力』的问题：注意力本质是加权平均，没有 FFN 的非线性变换，多层堆叠等价于一层。同时模型需要 somewhere 存储训练语料里的世界知识——FFN 的海量参数（占全模型 2/3）承担了这个角色。",
+    "points": [
+      "FFN 占模型参数约 2/3：7B 模型里 FFN 部分约 4.7B——微调显存不够时优先想到它",
+      "SwiGLU 是现代标配：门控机制让网络学会『哪些信息该放行』，同参数效果优于 ReLU/GELU",
+      "知识存在 FFN 里：模型产生幻觉的一个解释是 FFN 里存了错误/过时的知识条目"
+    ],
+    "pitfalls": [
+      "以为 FFN 是可有可无的配角——去掉 FFN 模型能力断崖式下跌，它是参数量和知识容量的主体",
+      "微调时对 FFN 全量更新——7B 模型全量微调要 60GB+ 显存，这就是 LoRA 优先作用在注意力投影上的原因之一",
+      "升维比 4 倍是铁律的误解——用 SwiGLU 时 8/3 才能对齐参数量"
+    ],
+    "applications": [
+      "MoE 的专家就是多个并行 FFN：每次只激活其中一两个（见 MoE 概念卡）",
+      "模型编辑（knowledge editing）：直接修改 FFN 权重纠正常识错误，不用重训",
+      "量化压缩：FFN 权重对量化最不敏感，INT4 量化主要压的就是它"
+    ],
+    "example": {
+      "scenario": "研究者在 FFN 中定位到存储『埃菲尔铁塔在巴黎』这条知识的 3 个关键神经元，只修改这几个权重就能纠正或改写这条事实——不用重新训练，像改数据库的一条记录。",
+      "code": "import torch, torch.nn as nn\n\n# 传统 FFN（原版论文）\nffn_classic = nn.Sequential(\n    nn.Linear(512, 2048), nn.ReLU(), nn.Linear(2048, 512))\n\n# 现代 SwiGLU（LLaMA 风格）：门控版\nclass SwiGLU(nn.Module):\n    def __init__(self, d=512, hidden=1366):  # 8/3 比例对齐参数量\n        super().__init__()\n        self.w_gate = nn.Linear(d, hidden, bias=False)\n        self.w_up = nn.Linear(d, hidden, bias=False)\n        self.w_down = nn.Linear(hidden, d, bias=False)\n\n    def forward(self, x):\n        return self.w_down(\n            torch.nn.functional.silu(self.w_gate(x)) * self.w_up(x))\n        #                    门控(决定放行多少)   ×   信息(放行什么)"
+    },
+    "related": [
+      "transformer",
+      "moe",
+      "residual-norm",
+      "quantization"
+    ],
+    "extended": "进阶方向：GLU 变体论文（SwiGLU/GeGLU）、ROME/MEMIT 知识编辑、FFN 与注意力参数配比研究",
+    "image": "images/ffn.png"
+  },
+  {
     "id": "token",
     "category": "大模型基础",
     "name": "Token",
@@ -635,6 +782,377 @@
     ],
     "extended": "进阶方向：模型路由框架（RouteLLM）、成本/效果帕累托曲线、模型评测集建设方法",
     "image": "images/model-selection.png"
+  },
+  {
+    "id": "pre-training",
+    "category": "大模型进阶",
+    "name": "预训练（Pre-training）",
+    "summary": "用『预测下一个词』这一件事，在万亿 token 上训练出模型的全部语言能力与世界知识。",
+    "description": "预训练是大模型生产的第一阶段：在海量无标注文本（网页、书籍、代码）上做自监督学习——不断遮住下一个词让模型预测，用预测误差更新参数。GPT 类模型的任务只有一句『predict the next token』，但为了让预测更准，模型被迫学会语法、事实知识、推理模式甚至情感分析——所有下游能力都是这个目标的副产品。训练一次的成本从数百万到上亿美元，之后模型的能力框架就基本定型。",
+    "analogy": "像把一个孩子扔进全球最大的图书馆读 20 年书，不讲课、不出题、不打分，只让他不断玩『看前文猜后文』的游戏。猜得多了，他自然学会了语言、历史、物理常识和写作套路——尽管从没人教过他。",
+    "background": "思想源头是 2003 年 Bengio 的神经语言模型，2018 年 GPT-1（1.17 亿参数， bookscorpus 数据）证明『先预训练再微调』范式的威力；2020 年 GPT-3（1750 亿参数）发现预训练模型不微调也能干活（in-context learning），预训练从『打地基』升级为『能力本体』。2022 年 Chinchilla 论文重新校准了数据量与参数量的配比（每参数约 20 token），从此训练配方有了科学依据。2024 年起高质量数据渐显枯竭，『数据墙』成为预训练的核心议题。",
+    "problem": "解决『标注数据永远不够』的问题：全世界人工标注的文本不到万亿分之一，而互联网上有几十万亿 token 的天然素材。自监督把『无标注文本』变成无限的训练信号——每个词都是标准答案，这就是大模型能 scale 的根本原因。",
+    "points": [
+      "配方三要素：参数量、数据量（token 数）、算力——Chinchilla 定律给出最优配比约 1 参数 : 20 token",
+      "数据质量 > 数据数量：现代预训练 60% 的工作在数据清洗（去重、过滤低质、配比调优）",
+      "预训练决定能力上限，后训练决定能不能用——基座模型不会好好说话是正常的"
+    ],
+    "pitfalls": [
+      "以为预训练模型开箱即用——基座（base model）只会续写，让它回答问题它会接着你的问题继续编问题",
+      "低估数据工程的分量——训练代码一周就写完，数据管道要磨几个月",
+      "以为知识在预训练后还能便宜地更新——改预训练知识基本等于重训，所以才有 RAG 这条路线"
+    ],
+    "applications": [
+      "基座模型生产：OpenAI/DeepSeek/Qwen 等所有大模型公司的核心资产",
+      "领域继续预训练（continued pre-training）：拿医疗/法律语料在基座上继续练，低成本注入领域知识",
+      "代码模型：在 GitHub 语料上预训练出代码能力（CodeLlama、DeepSeek-Coder 的路径）"
+    ],
+    "example": {
+      "scenario": "输入『法国的首都是___』，模型第一次预测『伦敦』（随机初始化后瞎猜），训练 1000 亿步后预测『巴黎』并给出 0.98 的置信度。没有人告诉它这条知识——它在数万篇提到巴黎的文档里反复见过这个模式，为了把预测 loss 降下去，巴黎这个事实被写进了 FFN 权重。",
+      "code": "# 预训练循环的本质（伪代码，真实训练是它的分布式版）\nmodel = GPT(vocab=15万, layers=80, dim=8192)   # 数十亿参数\noptimizer = AdamW(lr=3e-4)\n\nfor step, batch in enumerate(dataloader):      # batch: 几百万token\n    x, y = batch[:, :-1], batch[:, 1:]         # 输入=原文，标签=右移一位\n    logits = model(x)                          # 预测每个位置的下一个词\n    loss = cross_entropy(logits, y)            # 只有一件事：预测对不对\n    loss.backward()                            # 反向传播\n    optimizer.step()\n    if step % 1000 == 0:\n        print(f'step {step}, loss {loss:.3f}') # loss 从 10+ 降到 ~1.8\n# 训练几千亿 token 后，loss 收敛 -> 基座模型诞生"
+    },
+    "related": [
+      "post-training",
+      "scaling-laws",
+      "token",
+      "ffn"
+    ],
+    "extended": "进阶方向：Chinchilla 论文、数据配比研究（Dolma/FineWeb 数据集）、MiniCPM/TinyLlama 等小成本复现实验",
+    "image": "images/pre-training.png"
+  },
+  {
+    "id": "post-training",
+    "category": "大模型进阶",
+    "name": "后训练（Post-training）",
+    "summary": "基座模型的『职业培训』：SFT 教会好好说话，RLHF/DPO 教会对齐人类偏好。",
+    "description": "后训练是预训练之后的全部训练阶段，把『会续写的基座』变成『能对话、听指令、守安全的助手』。三大支柱：SFT（监督微调）用几万到几百万条人工写的高质量问答对教会指令跟随；RLHF（人类反馈强化学习）用人类偏好排序训练奖励模型再做强化学习，让模型的回答向人类偏好对齐；DPO（直接偏好优化）是 2023 年出现的简化替代——跳过奖励模型，直接用偏好对训练，成本低效果好，开源模型几乎人手一套。",
+    "analogy": "预训练像读完 20 年书的博学家，但说话方式是『继续你的句子』；SFT 是岗前培训——教他对话的格式和礼貌；RLHF 是服务评价系统——客户给满意/不满意评分，他学会讨好（划掉）对齐客户偏好；DPO 是把『看评分调整』简化成『直接拿好评和差评的对比案例学习』。",
+    "background": "2022 年 InstructGPT 论文确立了 SFT+RLHF 三阶段范式，ChatGPT 的成功让『对齐（alignment）』从学术词汇变成产业核心。2023 年 LIMA 论文震惊业界：1000 条精心挑选的 SFT 数据就能唤醒基座的对话能力（quality over quantity）；同年 DPO 论文把 RLHF 的复杂度砍掉一大半，Zephyr 等开源模型证明其有效。2024 年后范式继续演化：Anthropic 的 Constitutional AI（用 AI 反馈替代人类反馈 RLAIF）、推理模型用可验证奖励的 RL（o1/R1 路线）。",
+    "problem": "解决『基座模型能力很强但没法用』的问题：基座被训练成补全机器，你问『法国首都是哪』它可能接着写『英国首都是哪』（训练数据里两句话常连在一起）。后训练要教会三件事：听懂指令（指令跟随）、用人类喜欢的方式回答（有用/诚实/无害）、拒绝不该做的事（安全对齐）。",
+    "points": [
+      "SFT 的关键是质量而非数量：LIMA 证明 1000 条精品 > 5 万条平庸",
+      "RLHF 会带来『对齐税』：过度优化奖励模型导致回答冗长讨好、能力轻微下降",
+      "DPO = RLHF 的平替：去掉奖励模型和 PPO 的复杂度，开源社区的主力方案"
+    ],
+    "pitfalls": [
+      "以为后训练能注入知识——它的本职是调行为不教知识，知识该在预训练/继续预训练阶段灌入",
+      "SFT 数据质量参差——网上爬的低质对话集会把模型带偏，一条垃圾数据的伤害要十条精品才能补回",
+      "RLHF 奖励被钻空子（reward hacking）——模型学会写长废话刷分，需要 KL 惩罚约束别跑太远"
+    ],
+    "applications": [
+      "对话助手：ChatGPT/Claude/DeepSeek 的对话能力全部来自后训练",
+      "行业定制：用企业自有问答对 SFT 出领域风格（客服话术、法律文书格式）",
+      "推理模型：o1/DeepSeek-R1 用可验证奖励（数学题答案对错）做 RL，激活深度思考"
+    ],
+    "example": {
+      "scenario": "同一个问题『怎么减肥？』——基座模型输出『怎么增肥？怎么长高？（训练集里的关联问题）』；SFT 后输出条理清晰的建议；RLHF 后回答会补充『建议咨询医生，不推荐极端节食』——安全意识是对齐阶段赋予的。",
+      "code": "# 后训练三阶段的数据形态（伪代码）\n# 阶段1 SFT: 问答对\nsft_data = [\n    {'messages': [{'role': 'user', 'content': '怎么做蛋炒饭'},\n                  {'role': 'assistant', 'content': '步骤：1... 2...'}]}\n]\n\n# 阶段2 RLHF: 人类偏好排序（同一问题多个回答，标好坏）\npref_data = [{'question': '怎么做蛋炒饭',\n              'chosen': '结构清晰的回答（人标：好）',\n              'rejected': '冗长啰嗦的回答（人标：差）'}]\n# -> 训练奖励模型 -> PPO 强化学习\n\n# 阶段2' DPO: 直接用偏好对训练（省掉奖励模型）\n# loss = -log sigmoid(β·(logπ(chosen) - logπ_ref(chosen))\n#                   - β·(logπ(rejected) - logπ_ref(rejected)))"
+    },
+    "related": [
+      "rlhf",
+      "pre-training",
+      "prompt-engineering",
+      "hallucination"
+    ],
+    "extended": "进阶方向：InstructGPT/LIMA/DPO 三篇必读、Constitutional AI、GRPO（DeepSeek 的简化 PPO）、推理模型训练（R1-Zero）",
+    "image": "images/post-training.png"
+  },
+  {
+    "id": "rlhf",
+    "category": "大模型进阶",
+    "name": "RLHF（人类反馈强化学习）",
+    "summary": "让千万人类的偏好凝练成一个奖励信号，再用强化学习把模型行为『拉』向人类期待。",
+    "description": "RLHF（Reinforcement Learning from Human Feedback）的完整流程：① 人类标注员对同一问题的多个回答排序，② 用排序数据训练奖励模型（Reward Model，学会给任意回答打分），③ 用 PPO 等强化学习算法最大化奖励模型的评分来微调语言模型，同时用 KL 惩罚防止模型跑偏太远。它是 ChatGPT『好用』的核心技术，也让『对齐』从哲学讨论变成可执行的工程。",
+    "analogy": "像训练美食厨师：写菜谱（SFT）只能教标准流程；要成为米其林，得让美食评委（奖励模型）匿名品尝并排名，厨师根据评委口味反复改进。但要给厨师栓一根安全绳（KL 惩罚）——不能为了讨好评委把菜做成糖精味，还得是他原本的手艺。",
+    "background": "思想源于 2017 年 OpenAI 的『深度强化学习 from 人类偏好』（玩雅达利游戏）；2020 年第一次用在语言模型上（summarization）；2022 年 3 月 InstructGPT 论文完整确立三阶段范式，同年 11 月 ChatGPT 将其推向全球。2023 年 DPO 出现后学界分裂为两派：派系工程（RLHF/PPO 效果上限高，OpenAI/Anthropic 坚持）与简化派（DPO 系简单稳定，开源社区主力）。2024 年 DeepSeek 的 GRPO 和 R1 用可验证奖励（数学/代码对错自动判分）绕开人类标注，开启 RLVR（可验证奖励强化学习）新范式。",
+    "problem": "解决『好回答无法用损失函数定义』的问题：SFT 只能模仿标准答案，但『有帮助、诚实、无害』没有唯一标准答案。人类排序数据教会奖励模型『什么是更好』，强化学习让模型朝『更好』的方向持续优化——把模糊的价值判断变成了可优化的数字目标。",
+    "points": [
+      "三个组件：奖励模型（价值裁判）+ PPO（优化引擎）+ KL 惩罚（安全绳，防跑偏）",
+      "奖励模型是最值得投入的资产：Anthropic 公开说 RLHF 效果主要取决于奖励模型质量",
+      "对齐税真实存在：RLHF 后模型在部分基准上略降——能力与行为的权衡"
+    ],
+    "pitfalls": [
+      "reward hacking（奖励作弊）：模型学会冗长、堆砌免责声明、过度讨好来刷分——奖励模型能被钻空子",
+      "标注员偏好≠真实用户偏好：标注员喜欢详细，用户可能嫌啰嗦，样本偏差会被放大",
+      "以为 RLHF 教知识：它只调行为风格和倾向，知识缺陷要在预训练阶段解决"
+    ],
+    "applications": [
+      "对话产品对齐：ChatGPT/Claude 的有用性、安全性、语气全部由 RLHF 塑造",
+      "Claude 的 Constitutional AI：用一组原则让 AI 给 AI 排序（RLAIF），人工只审原则",
+      "推理模型：DeepSeek-R1 用规则奖励（答案对错、格式正确）做 GRPO，无需人类标注"
+    ],
+    "example": {
+      "scenario": "用户问『如何制造危险物品？』。SFT 模型可能老实回答（模仿训练数据）。RLHF 后模型输出拒绝+解释+安全替代建议——因为标注员在排序时把『拒绝并解释』排在『顺从回答』前面，奖励模型学会了这种偏好，PPO 训练让拒绝行为成为策略。",
+      "code": "# RLHF 三阶段的训练形态（伪代码）\n# ① 排序数据 -> 奖励模型\nreward_model.train(\n    pairs=[('回答A（人评更好）', '回答B') for ...],\n    loss='A得分应比B高')\n\n# ② PPO 循环：模型生成 -> 奖励 -> 更新\nfor batch in prompts:\n    responses = policy.generate(batch)\n    rewards = reward_model(batch, responses)\n    kl = KL(policy, ref_model)              # 与初始模型的偏离度\n    objective = rewards - β * kl            # 奖励 - 安全绳惩罚\n    ppo_step(objective)                     # 更新策略\n\n# ③ DPO 平替（无奖励模型，直接偏好优化）\ndpo.train(pairs=pref_data)  # 一行代替上面全部"
+    },
+    "related": [
+      "post-training",
+      "hallucination",
+      "prompt-engineering",
+      "pre-training"
+    ],
+    "extended": "进阶方向：InstructGPT 原论文、Anthropic HHh 数据集与 Constitutional AI、GRPO 算法、RLVR（可验证奖励）",
+    "image": "images/rlhf.png"
+  },
+  {
+    "id": "scaling-laws",
+    "category": "大模型进阶",
+    "name": "Scaling Laws（缩放定律）",
+    "summary": "模型能力随参数、数据、算力的增加可预测地提升——大模型军备竞赛的理论地图。",
+    "description": "Scaling Laws 是 2020 年 OpenAI 发现的经验规律：语言模型损失随参数量 N、数据量 D、训练算力 C 的幂律（power law）平滑下降，跨越多个数量级都成立。2022 年 DeepMind 的 Chinchilla 论文修正了最优配比：给定算力预算，参数和数据的最佳比例约为 1:20（GPT-3 时期严重『参数过量、数据不足』）。这组规律把『该训多大模型』从玄学变成可计算的预算规划，是过去五年所有军备竞赛的理论依据。",
+    "analogy": "像健身的收益曲线：前三个月从卧推 40kg 到 60kg 很快，从 140 到 160 要练三年——幂律增长意味着每一分提升都比上一分更贵，但方向永远明确、收益永远存在。Chinchilla 定律则是『蛋白粉和训练时长要按比例配』的科学配方。",
+    "background": "2020 年 Kaplan et al.（OpenAI）发表《Scaling Laws for Neural Language Models》，直接催生 GPT-3/GPT-4 的砸钱路线；2022 年 Hoffmann et al.（DeepMind）用更充分的实验提出 Chinchilla 最优配比（70B 模型 + 1.4T token 胜过 280B + 300B token），随后 LLaMA 选择『故意超出 Chinchilla 配比多训数据』——因为推理成本比训练成本更长期，小模型多训更划算（推理最优 vs 训练最优的分野）。2022 年 Wei et al. 发现涌现能力（Emergent Abilities）：某些任务在规模跨过阈值后能力突然出现，是否真『涌现』至今有争议（可能是指标不连续的假象）。",
+    "problem": "解决『下一版模型该多大、用多少数据、花多少钱』的决策问题：训 1 万亿参数前，先用 1/1000 的小模型跑出缩放曲线，外推大模型的预期损失和效果——把上亿美元的训练变成有预期收益的投资决策，而不是赌博。",
+    "points": [
+      "幂律的实践含义：损失从 2.5 降到 2.0 需要的算力是 2.5→2.4 的几十倍——越往后越贵",
+      "Chinchilla 配比：每参数约 20 token 训练数据；但产品化模型常『过训』（LLaMA-3 用 15T token 训 8B，约 1900:1）因为推理便宜更重要",
+      "涌现能力有争议：跨阈值突变可能是评测指标不连续造成的假象（Schaeffer 2023），但『规模带来质变』的行业共识没有变"
+    ],
+    "pitfalls": [
+      "以为无脑堆参数就行——数据跟不上，大参数就是浪费（Chinchilla 之前全行业的误区）",
+      "用小模型曲线线性外推大模型——幂律是非线性的，外推要在对数坐标下做且留误差余量",
+      "忽视数据质量变量——缩放定律假设数据分布稳定，用垃圾数据堆 token 不遵循经典曲线"
+    ],
+    "applications": [
+      "训练预算规划：先训小模型系列画出曲线，再决定旗舰参数量（所有大厂的标准流程）",
+      "小模型战略：LLaMA-3 8B 用 15T token 过训，换取推理成本优势——对缩放定律的工程化运用",
+      "能力预测：GPT-4 训练前就用小模型外推出在各类考试上的通过率"
+    ],
+    "example": {
+      "scenario": "你预算 100 万美元训练模型。先花 1 万美元训 7 个不同大小的模型（10M~1B 参数），在对数坐标上画出损失-算力直线，外推得到：1B 模型配 20B token 可以把损失压到 X——这条曲线告诉你值得继续加钱到哪一步，而不是拍脑袋。",
+      "code": "# 缩放实验的标准流程（伪代码）\nsizes = [10e6, 30e6, 100e6, 300e6, 1e9]   # 模型参数系列\nlosses = [train_and_eval(n) for n in sizes]\n\n# 幂律拟合: L(N) = a * N^(-b) + c\nimport numpy as np\ncoef = np.polyfit(np.log10(sizes), losses, 1)\n\n# 外推: 预算允许 100B 参数时的预期损失\npred = coef[0] * np.log10(100e9) + coef[1]\nprint(f'100B 模型预期损失: {pred:.3f}')\n# 决策: 损失预期收益 vs 训练成本 -> 立项或调整"
+    },
+    "related": [
+      "pre-training",
+      "moe",
+      "model-selection",
+      "evaluation-metrics"
+    ],
+    "extended": "进阶方向：Kaplan 2020 / Chinchilla 2022 两篇对照读、涌现能力之争（Schaeffer 2023）、数据受限时代的 scaling 新变量",
+    "image": "images/scaling-laws.png"
+  },
+  {
+    "id": "kv-cache",
+    "category": "大模型进阶",
+    "name": "KV Cache 与推理加速",
+    "summary": "推理提速的最大功臣：把算过的 Key/Value 存起来不重复算——代价是显存。",
+    "description": "Transformer 自回归生成时每步只新增一个 token，但注意力需要和全部历史做交互。KV Cache 把每个位置每层的 Key/Value 缓存下来，新 token 只需计算自己的 Q/K/V 追加进去，历史部分的计算全部省掉——没有它每生成一个字都要重算全文，有它生成速度提升几十倍。代价是显存：KV Cache 大小 = 2×层数×KV头数×头维度×序列长度×精度字节数，长上下文+大并发时它是显存的第一杀手。优化路线：GQA/MQA/MLA 压缩 KV 本身，PagedAttention（vLLM）消灭显存碎片，量化 KV 到 INT8。",
+    "analogy": "像开会时的会议纪要：没做纪要时，每来一个新议题都要把之前所有讨论重新推演一遍（重算历史）；做了纪要（KV Cache），新议题只需对照纪要追加讨论。纪要越攒越厚（序列越长），会议室的桌子（显存）就越来越不够放——所以要么把纪要写薄（GQA/量化），要么优化桌子的使用方式（PagedAttention）。",
+    "background": "KV Cache 从 Transformer 推理的第一天就存在（实现很自然），但它成为焦点是 2023 年长上下文和高并发服务兴起之后。关键里程碑：vLLM 的 PagedAttention（2023，借鉴操作系统虚拟内存分页管理 KV 显存，吞吐提升 2-4 倍）；GQA 在 LLaMA-2/3 成为默认；DeepSeek 的 MLA（2024）把 KV 压缩到原来的 5%，同时效果不掉，是推理成本革命的代表性工作。",
+    "problem": "解决『自回归生成的重复计算』问题：生成第 1000 个 token 时，前 999 个 token 的 K/V 是固定不变的，重算是纯浪费。同时解决工程化的显存难题——7B 模型 32K 上下文单请求 KV 就要 8GB+，不加优化一张卡服务不了几个用户。",
+    "points": [
+      "显存公式要会算：KV 大小 = 2 × 层数 × KV头数 × 头维 × 序列长 × 批量 × 精度字节——它是并发容量的分母",
+      "GQA 压 KV 头数、MLA 压 KV 维度、PagedAttention 压碎片、量化压精度——四条压缩路线",
+      "KV Cache 命中率是新指标：相同前缀的请求共享缓存（system prompt 复用），前缀缓存能省一半成本"
+    ],
+    "pitfalls": [
+      "以为推理慢是算力不够——多数情况是显存带宽：每生成一个 token 要把整个 KV Cache 读一遍，带宽是瓶颈",
+      "忽略 batch 内序列长度不齐——传统按最大长度预留显存，碎片浪费 60%+，PagedAttention 就是治这个",
+      "长对话不清理缓存——多轮对话 KV 一直累积，8 轮后显存爆掉；要做前缀复用和淘汰"
+    ],
+    "applications": [
+      "vLLM/SGLang/TensorRT-LLM：现代推理框架的核心就是 KV Cache 管理",
+      "API 成本优化：Prompt Caching（OpenAI/Anthropic 前缀缓存）本质是服务端 KV 复用，重复 system prompt 打 5 折",
+      "本地部署：量化 + GQA 后 7B 模型在游戏显卡上跑 32K 上下文"
+    ],
+    "example": {
+      "scenario": "客服系统 100 个并发会话共用同一个 2000 token 的系统提示。启用前缀缓存后，2000 token 的 KV 只算一次全站共享，每会话每秒节省 80% 的预填充算力——这就是 API 提供商敢给缓存命中打 1-2 折的底气。",
+      "code": "# KV Cache 显存速算（面试级公式）\n# KV = 2(K和V) × layers × kv_heads × head_dim × seq_len × batch × bytes\nL, H, D = 32, 8, 128          # 7B模型: 32层, GQA 8个KV头, 头维128\nseq, batch, bytes_ = 32768, 1, 2   # 32K上下文, FP16\n\nkv_gb = 2 * L * H * D * seq * batch * bytes_ / 1024**3\nprint(f'单请求 KV: {kv_gb:.1f} GB')   # -> 8.0 GB\n\n# 优化路径:\n# GQA(H:32->8)   -> 2.0 GB\n# + KV INT8      -> 1.0 GB\n# + PagedAttention -> 消除预留浪费，并发x3\n# 结论: 没有这些优化, 单卡A10(24GB)只能服务2个长上下文用户"
+    },
+    "related": [
+      "multi-head-attention",
+      "context-window",
+      "flash-attention",
+      "quantization"
+    ],
+    "extended": "进阶方向：PagedAttention/vLLM 论文、MLA（DeepSeek）、前缀缓存与 radix attention（SGLang）、KV 量化（KIVI）",
+    "image": "images/kv-cache.png"
+  },
+  {
+    "id": "quantization",
+    "category": "大模型进阶",
+    "name": "模型量化（Quantization）",
+    "summary": "把权重从 FP16 压到 INT8/INT4：模型体积和显存需求砍半再砍半，能力只掉一点点。",
+    "description": "量化用更低的数值精度存储和计算神经网络权重：FP16（16 位）→ INT8（8 位）体积减半 → INT4（4 位）再减半。原理是神经网络的权重分布集中且冗余，用更少的比特近似表示几乎不损失能力。主流方法：训练后量化 PTQ（GPTQ/AWQ，不用重训，几小时搞定）；量化感知训练 QAT（训练时就模拟量化，效果最好但成本高）。对用户最熟悉的形态是 GGUF（llama.cpp 生态）：一台游戏本跑 70B 模型全靠它。",
+    "analogy": "像把无损音乐（FP32）转成 320K MP3（INT8）再转成 128K（INT4）：文件小了 4~8 倍，听感（模型能力）只有轻微变化。关键是找对压缩算法——傻瓜式均匀切割（朴素 round）会毁掉细节，聪明的压缩（GPTQ/AWQ）会把宝贵的比特分配给最重要的音符。",
+    "background": "量化是深度学习部署的老技术（手机端 INT8 推理 2015 年就有），LLM 时代两个里程碑：GPTQ（2022，基于近似二阶信息的逐层量化，单卡几小时量化 175B）和 AWQ（2023，激活感知——保护对输出影响大的 1% 关键权重）。2023 年 llama.cpp 生态把 GGUF 量化格式带到消费级硬件，『笔记本跑大模型』从口号变成现实。2024 年前沿转向 1.58-bit（BitNet 三值权重）和原生低精度训练。",
+    "problem": "解决『大模型装不下、跑不动、用不起』的问题：70B 模型 FP16 要 140GB 显存（8 张 A100），INT4 量化后 35GB（一张 48GB 卡）；显存省了，带宽压力也小了——推理速度反而更快。对端侧（手机/笔记本）量化是唯一可行路线。",
+    "points": [
+      "INT8 几乎无损、INT4 掉 1~3 个点、INT2 基本残废——4 bit 是当前性价比甜点",
+      "AWQ 的洞察：只有约 1% 的权重（激活大的）对效果关键，量化时重点保护它们",
+      "显存省 ≠ 一切：部分算子反量化开销可能拖慢速度，要看框架支持（ llama.cpp/vLLM 的 W4A16）"
+    ],
+    "pitfalls": [
+      "所有模型无脑 INT4——小模型（<3B）和数学/代码任务对量化更敏感，先测再上",
+      "以为量化能修复烂模型——它只压缩不提升，垃圾进垃圾出",
+      "混淆权重位宽和激活位宽——W4A16（权重4位激活16位）是主流，W4A4（全4位）更省但技术门槛高"
+    ],
+    "applications": [
+      "本地部署：Ollama/llama.cpp + GGUF 量化模型，游戏本跑 Qwen/DeepSeek",
+      "推理服务降本：vLLM 的 AWQ/GPTQ 模型，同等显存服务 2-4 倍并发",
+      "长上下文 KV 量化：KV Cache 也压到 INT8，上下文容量翻倍"
+    ],
+    "example": {
+      "scenario": "你要在自己 24GB 显存的 4090 上跑 DeepSeek-R1 蒸馏版 32B 模型：FP16 需要 64GB 装不下；AWQ INT4 量化后 18GB，轻松装下，速度还快 40%，数学能力评测只掉了 1.2 个点——量化让消费级硬件摸到了旗舰开源模型。",
+      "code": "# 用 AutoAWQ 量化一个模型（生产级 3 行核心）\nfrom awq import AutoAWQForCausalLM\nfrom transformers import AutoTokenizer\n\nmodel_path = 'Qwen/Qwen2.5-32B'\nmodel = AutoAWQForCausalLM.from_pretrained(model_path)\ntokenizer = AutoTokenizer.from_pretrained(model_path)\n\nmodel.quantize(tokenizer, quant_config={\n    'w_bit': 4, 'q_group_size': 128,\n    'zero_point': True, 'version': 'GEMM'})\n\nmodel.save_quantized('./qwen32b-awq')   # 64GB -> 约18GB\n# 部署: vllm serve ./qwen32b-awq --quantization awq\n# 体积对比: FP16 64GB | INT8 32GB | INT4 18GB | 速度: 越压越快(省带宽)"
+    },
+    "related": [
+      "kv-cache",
+      "distillation",
+      "model-selection",
+      "docker"
+    ],
+    "extended": "进阶方向：GPTQ/AWQ 论文、llama.cpp 的 k-quants、BitNet 1.58-bit、量化后评测（perplexity + 下游任务都要测）",
+    "image": "images/quantization.png"
+  },
+  {
+    "id": "distillation",
+    "category": "大模型进阶",
+    "name": "知识蒸馏（Distillation）",
+    "summary": "让小模型拜大模型为师：用老师的输出当教材，小模型学会八成功力只花一成成本。",
+    "description": "知识蒸馏是模型压缩技术：训练一个小模型（学生）去模仿大模型（老师）的输出分布，而不是直接模仿标注答案。精髓在于『软标签』——老师输出的概率分布（如：猫 0.85 / 狗 0.1 / 狐狸 0.03）包含类间相似性的『暗知识』，比 one-hot 硬标签信息量大得多。LLM 时代的形态是让学生对老师的海量输出做 SFT（如 DeepSeek-R1 蒸馏 Qwen 系列：80 万条 R1 生成的推理样本，把推理能力灌进 7B~32B 小模型）。",
+    "analogy": "不是让学生背标准答案（硬标签），而是让学霸老师把解题过程和『我觉得 C 选项也像对的，有 30% 可能』的判断直觉都讲给学生听。学生学到的不是知识点本身，而是老师的判断模式——所以小模型也能学会老师风格的推理。",
+    "background": "2015 年 Hinton 的《Distilling the Knowledge in a Neural Network》奠基（『暗知识』与温度参数 T）。BERT 时代 DistilBERT（60% 参数保持 97% 能力）验证了 NLP 大规模蒸馏的可行性。2023 年起 LLM 蒸馏成为开源生态的发动机：Vicuno/Alpaca 用 GPT 的输出做 SFT（广义蒸馏）；2024 年 DeepSeek-R1 发布同时开源 6 个蒸馏模型（R1-Distill-Qwen-7B/32B 等），7B 模型获得接近 GPT-4o 级别的数学推理——蒸馏的里程碑时刻。安全提醒：蒸馏别人 API 的输出做商用有条款和法律风险（OpenAI ToS 明确禁止竞品蒸馏）。",
+    "problem": "解决『大模型能力强但贵，小模型便宜但弱』的矛盾：从零训练一个小模型的性价比远低于『让大模型当老师』——老师生成的数据天然自带高难度、高多样性和分布信息，小模型站在老师肩膀上学，训练成本降一个数量级。",
+    "points": [
+      "软标签的暗知识是精髓：老师对错误选项的概率分配，包含了类间关系的结构信息",
+      "LLM 蒸馏的主流形态已变成『数据蒸馏』：老师生成问答/推理数据 → 学生 SFT",
+      "学生不能无限逼近老师：容量差距决定上限，7B 学生蒸馏不出老师 1% 长尾能力"
+    ],
+    "pitfalls": [
+      "蒸馏学生的能力幻觉：R1-Distill 数学很强但通用对话能力弱——蒸馏只迁移老师练过的能力",
+      "忽视合法性：直接蒸馏竞品 API 输出可能违反服务条款，企业级项目用开源模型当老师更稳",
+      "数据质量不加甄别：老师也有幻觉，蒸馏数据要先过滤（R1 蒸馏数据经过了答案可验证性筛选）"
+    ],
+    "applications": [
+      "推理小模型：DeepSeek-R1-Distill 系列，让 7B 在数学竞赛级题目上接近大模型",
+      "垂域助手：用旗舰模型批量生成领域问答对，训练企业私有小模型（成本降 90%）",
+      "端侧部署：蒸馏+量化双剑合璧，手机上跑有能力的模型"
+    ],
+    "example": {
+      "scenario": "DeepSeek-R1-Distill-Qwen-7B：用 R1（671B 满血版）生成了 80 万条带完整思维链的数学/代码题解，对 Qwen2.5-7B 做纯 SFT（没有 RL）。结果：AIME 2024 从 21% 提到 55.5%——7B 小模型学会了大模型的推理风格，这是『数据蒸馏』威力的最佳广告。",
+      "code": "# LLM 数据蒸馏流水线（伪代码）\nteacher = load('deepseek-r1')      # 老师：671B\nstudent = load('qwen2.5-7b')       # 学生：7B\n\n# ① 老师 '出题+解题'：生成带思维链的数据\nproblems = sample_math_code_problems(800_000)\ndistill_data = []\nfor p in problems:\n    answer, cot = teacher.solve(p)       # 带完整推理过程\n    if verify(p, answer):                # 只保留可验证正确的\n        distill_data.append({'problem': p,\n                             'cot': cot, 'answer': answer})\n\n# ② 学生 SFT：模仿老师的思维链\nstudent.sft(distill_data)                # 纯监督,无需RL\n# 结果: AIME 21% -> 55% (7B参数)"
+    },
+    "related": [
+      "quantization",
+      "post-training",
+      "pre-training",
+      "model-selection"
+    ],
+    "extended": "进阶方向：Hinton 蒸馏原论文（温度参数 T）、R1 蒸馏报告、在线蒸馏 vs 离线蒸馏、蒸馏数据的合规边界",
+    "image": "images/distillation.png"
+  },
+  {
+    "id": "moe",
+    "category": "大模型进阶",
+    "name": "混合专家模型（MoE）",
+    "summary": "671B 总参数、每次只激活 37B——用『专科分诊』实现大容量小成本。",
+    "description": "混合专家（Mixture of Experts）把 Transformer 的 FFN 层替换成多个并行『专家』加一个路由器：每个 token 只被路由到 1~2 个最相关的专家处理，其余专家静默。总参数量决定模型的知识容量（专家越多知道得越多），激活参数量决定单次推理成本——DeepSeek-V3 总参数 671B 但每次只激活 37B，实现了大模型的能力、中等模型的推理价格。配套的挑战是负载均衡（防止所有流量都挤向热门专家）和显存（所有专家都要装进显存）。",
+    "analogy": "像三甲医院的分诊台：医院有 200 个科室的专家（总容量），但你看病只挂 1~2 个科（激活参数）。分诊护士（路由器）看一眼症状把你送去最对的科室。医院整体实力是 200 个科室的总和，但你的就诊成本只是两个门诊号。",
+    "background": "MoE 思想 1991 年就提出（Jacobs & Jordan），2017 年 Shazeer（也是 Transformer 作者之一）把它带进 LSTM，2021 年 Switch Transformer（Google，1.6 万亿参数）证明纯 Transformer MoE 可行但训练不稳。2023 年 Mixtral 8×7B 开源引爆生态；2024 年 DeepSeek-V3（671B/37B 激活）用细粒度专家+共享专家+无辅助损失的负载均衡把 MoE 推到新高度，以极低的 API 价格震撼行业——MoE 从研究技术变成开源旗舰标配。",
+    "problem": "解决『参数越多能力越强，但算力成本按参数线性增长』的矛盾：稠密模型 671B 每次推理要算满 671B 参数。MoE 用条件计算打破这个绑定——容量靠专家数量堆，成本只算激活的那部分，同预算下能获得远超稠密模型的能力。",
+    "points": [
+      "两个关键数字：总参数（容量）vs 激活参数（成本）——DeepSeek-V3 是 671B/37B，Mixtral 是 47B/13B",
+      "路由器是命门：token 级别的专家选择靠一个线性层+softmax，路由不准=能力浪费",
+      "训练需要负载均衡：不加约束时路由塌缩到少数专家，辅助损失或无损失策略（DeepSeek）来兜底"
+    ],
+    "pitfalls": [
+      "以为 MoE 省显存——省的是计算不省显存，全部专家都要装进显存（MoE 部署对显存要求更高）",
+      "以为每个专家是『专科医生』——可解释性研究发现专家按 token 类型/语法模式分工，并不对应人类理解的领域",
+      "小规模硬上 MoE——专家并行的通信开销在小集群上得不偿失，MoE 是大规模训练的技术"
+    ],
+    "applications": [
+      "开源旗舰：DeepSeek-V3/R1、Mixtral、Qwen3-MoE——新一代旗舰默认架构",
+      "API 低价的秘密：DeepSeek 能卖极低价，MoE 的低成本架构是底气之一",
+      "端云协同：云端 MoE 大模型 + 端侧蒸馏小模型的高低搭配"
+    ],
+    "example": {
+      "scenario": "同样是回答一个问题：稠密 70B 模型所有参数都参与（成本 70B FLOPs 级别）；DeepSeek-V3 只激活 8 个专家中的 2 个加 1 个共享专家（37B 激活），速度和价格都是稠密方案的零头，但 671B 的总容量让它的知识面远超 70B 稠密模型。",
+      "code": "import torch, torch.nn as nn\n\nclass MoELayer(nn.Module):\n    def __init__(self, d=512, n_experts=8, top_k=2):\n        super().__init__()\n        self.experts = nn.ModuleList([\n            nn.Sequential(nn.Linear(d, d*4), nn.GELU(),\n                          nn.Linear(d*4, d))       # 专家=FFN\n            for _ in range(n_experts)])\n        self.router = nn.Linear(d, n_experts)      # 分诊台\n        self.top_k = top_k\n\n    def forward(self, x):                      # x: (seq, d)\n        scores = self.router(x)                # 每个 token 对 8 个专家打分\n        topv, topi = scores.topk(self.top_k)   # 只选 2 个专家\n        out = torch.zeros_like(x)\n        for i in range(self.top_k):\n            idx, expert_ids = topi[:, i], topi[:, i]\n            for e in range(len(self.experts)):\n                mask = expert_ids == e\n                out[mask] += self.experts[e](x[mask]) * topv[mask, i:i+1]\n        return out   # 只算了 top_k 个专家: 计算量≈2/8, 容量=全部专家"
+    },
+    "related": [
+      "ffn",
+      "pre-training",
+      "scaling-laws",
+      "quantization"
+    ],
+    "extended": "进阶方向：Switch Transformer、Mixtral 技术报告、DeepSeek-V3 论文（无辅助损失负载均衡）、专家并行通信优化",
+    "image": "images/moe.png"
+  },
+  {
+    "id": "flash-attention",
+    "category": "大模型进阶",
+    "name": "FlashAttention",
+    "summary": "不改数学、只改读显存的方式：注意力训练速度翻倍、显存从 O(n²) 降到 O(n)。",
+    "description": "FlashAttention（2022，Stanford 的 Tri Dao）是注意力的底层实现革命。洞察：注意力的瓶颈不在计算而在显存读写——标准实现把巨大的中间矩阵（n×n 注意力分数）完整写进显存再读出来，而 GPU 的算力增长远快于带宽。FlashAttention 用分块（tiling）+在线 softmax 把计算全部放进高速的 SRAM 缓存里完成，中间矩阵从不落地：显存占用从 O(n²) 降到 O(n)，速度提升 2~4 倍，且数学结果完全精确（是精确注意力不是近似）。已是大模型训练推理的默认标配。",
+    "analogy": "像做一桌满汉全席：标准做法是每切一样菜都跑一趟大冰箱（显存）取放，大部分时间花在路上。FlashAttention 是把食材分批拿到灶台边的小料架（SRAM 缓存），一批菜在小料架空间内做完再换下一批——菜谱（数学）一模一样，出菜速度快一倍，灶台上还不用堆满所有食材（省显存）。",
+    "background": "GPU 硬件现实：A100 的计算速度 312 TFLOPS，但显存带宽只有 1.9TB/s——中间矩阵搬运的时间远超计算时间（memory-bound）。Tri Dao 2022 年发布 FlashAttention，2023 年 FlashAttention-2 进一步优化并行度（训练效率再提 2 倍），2024 年 FlashAttention-3 用上 H100 的异步特性。它没有论文热度上的喧嚣，却是过去三年所有大模型训练中都默默存在的功臣——GPT-4 时代模型的低成本训练有它一份硬功劳。",
+    "problem": "解决注意力的两大工程死穴：① 中间矩阵 O(n²) 显存——32K 上下文的注意力矩阵单层就要 4GB，是长上下文的显存杀手；② 显存读写瓶颈——标准实现 70% 的时间在搬数据不是在计算。分块重排后两个问题同时解决，且不牺牲任何精度。",
+    "points": [
+      "精确而非近似：与标准注意力数学等价（误差 float 级），可以放心替换",
+      "瓶颈视角：GPU 上优化前先问是 compute-bound 还是 memory-bound——注意力是后者",
+      "两大收益：长序列训练成为可能（显存 O(n)）+ 训练推理提速 2~4 倍（省带宽）"
+    ],
+    "pitfalls": [
+      "以为 FlashAttention 是新的注意力算法——数学与标准注意力完全一致，只是计算顺序/内存调度的重写",
+      "小序列硬用 FA——分块调度有固定开销，短序列（<1K）收益趋近于零",
+      "忽视硬件适配——FA-2/FA-3 分别为 A100/H100 的架构特性设计，框架里选错版本可能更慢"
+    ],
+    "applications": [
+      "训练标配：PyTorch 2.0 的 scaled_dot_product_attention 默认走 FA 内核",
+      "长上下文的幕后英雄：128K/1M 窗口能训能动，FA 的 O(n) 显存是前提之一",
+      "推理引擎：vLLM/TensorRT-LLM 内置 FA 变体，服务吞吐的关键组件"
+    ],
+    "example": {
+      "scenario": "把模型上下文从 8K 扩到 32K：标准注意力下，单层 n×n 分数矩阵从 0.25GB 涨到 4GB，显存直接爆炸；换 FlashAttention 后中间矩阵从不落地，显存只随 32K 线性增长，同卡顺利训练——长上下文时代的每一篇报告背后都有它。",
+      "code": "# 标准实现 vs FlashAttention 的区别（概念代码）\nimport torch\nimport torch.nn.functional as F\n\n# 标准实现: 中间矩阵全部落地显存 O(n^2)\ndef attention_naive(Q, K, V):\n    scores = Q @ K.T / (Q.shape[-1] ** 0.5)   # n×n 矩阵写入显存\n    attn = torch.softmax(scores, -1)          # 再读出来算 softmax\n    return attn @ V                           # 又写一个 n×n\n\n# FlashAttention: 分块+在线softmax, 中间结果不落地 O(n)\n# PyTorch 2.x 一行启用（自动调 FA 内核）\ndef attention_flash(Q, K, V):\n    return F.scaled_dot_product_attention(Q, K, V)\n    # 框架检测到可用硬件时, 自动走 flash/t高效内核\n    # 数学结果一致, 显存 O(n), 速度 x2~4\n\nQ, K, V = (torch.randn(1, 8, 32768, 64, device='cuda',\n           dtype=torch.float16) for _ in range(3))\n# attention_naive(Q, K, V)  # 32K: 每层 8GB 中间矩阵, OOM!\nout = attention_flash(Q, K, V)  # 顺利运行"
+    },
+    "related": [
+      "self-attention",
+      "kv-cache",
+      "residual-norm",
+      "context-window"
+    ],
+    "extended": "进阶方向：FlashAttention-1/2/3 论文对照、IO 感知算法设计思想、MLA/FlashAttention 在推理侧的组合",
+    "image": "images/flash-attention.png"
+  },
+  {
+    "id": "multimodal",
+    "category": "大模型进阶",
+    "name": "多模态大模型",
+    "summary": "给语言模型装上眼睛和耳朵：看图、听声、看视频，然后用语言回答。",
+    "description": "多模态大模型（MLLM）把文本之外的信息统一进 Transformer：主流架构是『编码器 + 连接器 + LLM』——视觉编码器（ViT 或 CLIP）把图片切成 patch 编码成向量序列，通过连接器（线性投影/Q-Former/MLP）映射到语言模型的 embedding 空间，LLM 把图像 token 和文字 token 一起当输入做推理。视频是帧采样后同理，语音走 Whisper 类编码器。代表：GPT-4o（原生多模态）、Gemini、Qwen-VL、Claude（图像）。2024 年后趋势是『原生多模态』——从预训练阶段就混合所有模态数据，而不是后期拼接。",
+    "analogy": "像培训一个天生只懂文字的人看世界：先给他配一副『翻译眼镜』（视觉编码器），把看到的画面翻译成他能懂的语言 token，再让他用自己的脑子（LLM）推理。眼镜好不好（编码器能力）和翻译接口顺不顺滑（连接器设计）决定了他『看得懂』的程度。",
+    "background": "脉络：2021 年 CLIP（OpenAI）用 4 亿图文对对齐图像和文本表示，奠定图文空间；2022 年 BLIP-2 提出 Q-Former 高效连接；2023 年 LLaVA 证明『ViT+MLP+LLM』的极简组合就能做出强视觉对话（开源多模态的爆点，全靠 GPT-4 生成的数据训练）；2023-2024 GPT-4V/GPT-4o 和 Gemini 展示原生多模态的体验差距；2024 年起语音实时对话（GPT-4o Voice）和视频理解成为新战场。国内 Qwen-VL 系列（Qwen2.5-VL 文档理解/视觉定位很强）开源生态繁荣。",
+    "problem": "解决『智能被锁死在文字里』的问题：人类 80% 的信息通过视觉获得，而纯 LLM 是个盲人——用户发一张报错截图、一份手写合同、一段监控视频，模型一概看不见。多模态把图像/音频/视频变成模型的原生输入，应用边界从『文字问答』扩展到『看懂世界』。",
+    "points": [
+      "三大件架构：视觉编码器（看）+ 连接器（翻译）+ LLM（思考），各自独立可替换",
+      "图像 = patch token：一张图切几百块，每块当一个『词』进 LLM——图片很吃上下文窗口",
+      "原生多模态 > 后期拼接：GPT-4o 类模型从预训练就混模态，图文理解深度显著更好"
+    ],
+    "pitfalls": [
+      "以为多模态模型会『生成图片』——看图（理解）和画图（生成）是两条技术线（后者是扩散模型），别混淆",
+      "忽视图片的 token 成本：一张高清图 1000+ token，多图对话成本翻倍",
+      "视觉细节幻觉：模型会把模糊图片强行『脑补』成常见物体（数不清图里几个人是经典翻车）"
+    ],
+    "applications": [
+      "文档智能：发票/合同/报表的截图理解与结构化提取（RPA 的 AI 版）",
+      "客服/维修：用户拍照报障，模型识别故障部件并给指导",
+      "无障碍：为视障用户实时描述摄像头画面",
+      "自动驾驶/机器人：VLM 做场景理解和任务规划（VLA 模型）"
+    ],
+    "example": {
+      "scenario": "用户把一张 Excel 截图发给客服机器人：ViT 把图切成 576 个 patch 编码，LLM 识别出这是季度销量表，理解『第三行为什么这么低』的提问，结合表格数据回答『Q3 华东区销量下滑 40%，主因是标注的缺货』——文字、表格、视觉理解在同一次推理里完成。",
+      "code": "# LLaVA 风格多模态推理（transformers 库）\nfrom transformers import LlavaNextProcessor, LlavaNextForConditionalGeneration\nimport torch\n\nprocessor = LlavaNextProcessor.from_pretrained('llava-hf/llava-v1.6-mistral-7b')\nmodel = LlavaNextForConditionalGeneration.from_pretrained(\n    'llava-hf/llava-v1.6-mistral-7b', torch_dtype=torch.float16,\n    device_map='auto')\n\n# 图像变成 576 个 '图像token' + 文字token 一起送入 LLM\nprompt = 'USER: <image>\\n这张发票的总金额和开票方是？ASSISTANT:'\nout = model.generate(**processor(prompt, images, return_tensors='pt')\n                     .to('cuda'))\nprint(processor.decode(out[0]))   # -> 总金额 ¥3,860，开票方：XX科技有限公司"
+    },
+    "related": [
+      "transformer",
+      "context-window",
+      "token",
+      "prompt-engineering"
+    ],
+    "extended": "进阶方向：LLaVA/BLIP-2/Qwen-VL 架构对比、CLIP 对比学习、原生多模态（GPT-4o）与拼接式的能力差异、视觉 token 压缩",
+    "image": "images/multimodal.png"
   },
   {
     "id": "agent",
@@ -2120,6 +2638,80 @@
     ],
     "extended": "进阶方向：pgvector HNSW 调参、JSONB 索引、PG 16 逻辑复制与高可用",
     "image": "images/postgresql.png"
+  },
+  {
+    "id": "mvcc",
+    "category": "工程与后端",
+    "name": "MVCC（多版本并发控制）",
+    "summary": "读写不互相阻塞的魔法：给数据留快照历史，读的人看旧版本，写的人写新版本。",
+    "description": "MVCC（Multi-Version Concurrency Control）是现代数据库并发控制的主流方案：每次更新不覆盖旧数据，而是创建新版本，事务按自己开始时的快照决定能看到哪个版本。效果是读不阻塞写、写不阻塞读——报表查询跑 10 分钟不影响订单写入，反之亦然。PostgreSQL 的实现最直观（元组里藏 xmin/xmax 事务号，过期版本由 VACUUM 清理）；MySQL InnoDB 用 undo log 版本链实现同样的语义。它是『可重复读』『读已提交』这些隔离级别的实现基础。",
+    "analogy": "像协作文档的修订历史：作者在写第 5 版（写不阻塞），你打开的还是第 4 版的快照（读旧版本），互不干扰。等作者保存后，新开文档的人才能看到第 5 版（新事务看新快照）。你手头的快照永远不会被作者的编辑实时打断。",
+    "background": "MVCC 1970 年代末由 MIT 的 David Reed 在博士论文中提出，1981 年 DEC 的 VAX 数据库首个商用实现，随后 InterBase/Oracle（回滚段）相继采用。PostgreSQL 1996 年起就把 MVCC 作为核心设计（这也是它没有回滚段、靠 VACUUM 回收的结构根源）；MySQL 的 InnoDB（2000 年代）用 undo log + ReadView 实现变体。今天几乎所有主流数据库（PG/MySQL/Oracle/SQL Server）都基于 MVCC 或其变体——理解 MVCC 是理解现代数据库并发行为的钥匙。",
+    "problem": "解决『读和写互相卡脖子』的问题：传统锁方案里，报表查询锁住 100 万行，订单写入就要等 10 分钟——并发能力崩塌。MVCC 用空间换并发：旧版本暂存，读写各自面向自己该看的版本，银行系统白天高峰的实时交易和 BI 报表查询互不拖累。",
+    "points": [
+      "核心三件套：版本存储（旧数据去哪）、快照判定（事务能看到哪个版本）、垃圾回收（旧版本谁来清）",
+      "PG 与 InnoDB 实现相反：PG 新版本写主表 + VACUUM 清理；InnoDB 主表放最新版 + undo log 链回溯旧版",
+      "长事务是 MVCC 头号杀手：一个跑几小时的事务会让旧版本一直无法回收，表膨胀、性能雪崩"
+    ],
+    "pitfalls": [
+      "以为 MVCC 完全无锁——它只消除读写冲突，写写冲突仍要锁或检测（PG 首提交胜出，InnoDB 行锁）",
+      "长事务挂着不管——PG 里一个忘关的事务阻止 VACUUM，表膨胀 10 倍是运维经典事故",
+      "以为 MVCC 能防幻读——PG 的 RR 用快照天然防大部分幻读，InnoDB 靠间隙锁，实现机制完全不同"
+    ],
+    "applications": [
+      "LLM 应用日志/审计：对话记录表大量写入的同时被分析查询读取，MVCC 让两者并行",
+      "高并发订单系统：下单写入与库存查询互不阻塞（配合乐观锁防超卖）",
+      "数据管道：ETL 长时间读快照，业务写入零感知"
+    ],
+    "example": {
+      "scenario": "分析师跑一个 15 分钟的报表查询（RR 隔离级别）。期间运营把某商品价格从 99 改成 89 并提交。分析师的报表里该商品始终显示 99（他的事务开始时的快照）——不会读到一半变成 89（避免不可重复读），运营也没有被报表阻塞。两个世界各自一致。",
+      "code": "-- PostgreSQL: 亲眼看看 MVCC 的多版本\nCREATE TABLE t (id int, price numeric);\nINSERT INTO t VALUES (1, 99);\n\n-- 会话A（分析师）\nBEGIN ISOLATION LEVEL REPEATABLE READ;\nSELECT price FROM t WHERE id = 1;   -- 看到 99（快照建立）\n\n-- 会话B（运营）: 此刻改价并提交\nUPDATE t SET price = 89 WHERE id = 1;  -- 成功，不被A阻塞\n\n-- 会话A 再读\nSELECT price FROM t WHERE id = 1;   -- 仍然是 99！\n-- (快照决定的: A 看到自己事务开始时的版本)\n\nCOMMIT;\nSELECT price FROM t WHERE id = 1;   -- 现在才是 89\n-- 底层: 旧行(99)与新行(89)共存，xmin/xmax 事务号决定谁看哪个\n-- 旧版本等 A 结束后由 VACUUM 回收"
+    },
+    "related": [
+      "transaction-isolation",
+      "postgresql",
+      "redis",
+      "sqlalchemy"
+    ],
+    "extended": "进阶方向：PostgreSQL MVCC 文档（xmin/xmax/ctid）、InnoDB undo 链与 ReadView、VACUUM 调优、长事务监控",
+    "image": "images/mvcc.png"
+  },
+  {
+    "id": "transaction-isolation",
+    "category": "工程与后端",
+    "name": "事务与隔离级别",
+    "summary": "ACID 的 I 怎么落地：四种隔离级别，是在『正确性』与『并发性』之间标价。",
+    "description": "事务把多条 SQL 捆绑成『要么全做、要么全不做』的原子单元（ACID）。隔离级别定义一个事务能看到其他并发事务到什么程度，共四级：读未提交（能看到别人没提交的脏数据）、读已提交（只能看到已提交的，但两次读可能不同）、可重复读（事务内多次读结果一致，MySQL 默认）、串行化（完全串行，最安全最慢）。三个经典异常对应着级别的分界：脏读（读到未提交）、不可重复读（同一行两次读不同）、幻读（同一条件两次读行数不同）。数据库选哪个级别，本质是给业务标价：愿意为正确性付出多少并发损失。",
+    "analogy": "像考试阅卷的四种管理制度：读未提交=允许看别人没交卷的草稿（可能全是错的）；读已提交=只看已交卷的，但你交卷前别人还在不断交卷，你看到的标准答案可能前后不一；可重复读=开考瞬间把所有已交卷的复印一份，你全程只看这份快照；串行化=一个考官一次只阅一份卷，绝对公平但阅卷排到明天。",
+    "background": "隔离级别 1970 年代随关系模型理论成型，SQL-92 标准正式定义四级（当时主要针对锁实现）。1995 年的批判性论文《A Critique of ANSI SQL Isolation Levels》指出标准定义的漏洞并补充了快照隔离（Snapshot Isolation）——它正是 MVCC 时代的实际标准（PostgreSQL 的 RR 本质是快照隔离）。MySQL InnoDB 默认 RR + 间隙锁解决幻读，PostgreSQL 默认 RC（读已提交）+ 依赖 MVCC——两大开源数据库在默认值上的分歧是工程界著名的选型话题。",
+    "problem": "解决『并发事务互相干扰导致数据不一致』的问题：转账同时读余额会算错、库存扣减并发会超卖、报表查询读到一半数据被改。隔离级别用清晰的语言定义『我愿意接受哪种异常换取多少并发』，让正确性工程化而不是撞运气。",
+    "points": [
+      "三个异常记牢：脏读（未提交数据）、不可重复读（同一行变了）、幻读（行数变了）——级别越高逐个消除",
+      "MySQL 默认可重复读（RR），PostgreSQL 默认读已提交（RC）——PG 的 RC + MVCC 已满足绝大多数业务",
+      "框架陷阱：Spring @Transactional 默认遇到运行时异常才回滚，受检异常不回滚——要显式声明 rollbackFor"
+    ],
+    "pitfalls": [
+      "以为隔离级别越高越好——串行化的并发损失常是性能自杀，业务正确性要用业务手段（乐观锁/唯一约束）保证，而不是无脑拉高级别",
+      "『可重复读能防幻读』一知半解——InnoDB 靠间隙锁在当前读时防幻读，快照读靠 MVCC；PG 的 RR 是快照隔离，语义又不同，跨数据库照搬结论会翻车",
+      "忘了事务边界里调外部 API——在事务里发 LLM 请求（几秒到几十秒），数据库连接被长期占用，连接池耗尽全线雪崩"
+    ],
+    "applications": [
+      "转账/支付：扣款和入账必须同事务（原子性），金额读写用悲观锁或乐观锁版本号防并发错算",
+      "库存扣减：RC 级别 + UPDATE WHERE stock > 0 的原子条件写法，比拉高隔离级别更高效",
+      "LLM 应用：对话记录落库、扣减 token 配额——短事务快速提交，绝不把模型调用包进事务"
+    ],
+    "example": {
+      "scenario": "并发下单导致超卖：两个用户同时买最后 1 件库存，都先 SELECT 到 stock=1，都执行扣减，结果卖成 -1。修复方案选一种：① 原子条件更新 UPDATE stock=stock-1 WHERE id=1 AND stock>0（推荐）；② SELECT ... FOR UPDATE 悲观锁；③ 加 version 字段乐观锁重试。隔离级别调到串行化也能防，但并发吞吐直接崩——业务手段永远比拉级别优先。",
+      "code": "-- 三种防超卖写法对比（以 PG/MySQL 通用语义为例）\n-- ① 原子条件更新（首选：无锁、一行搞定）\nUPDATE inventory SET stock = stock - 1\n WHERE product_id = 42 AND stock > 0;\n-- 检查受影响行数: 0 = 已售罄\n\n-- ② 悲观锁：先锁行再操作\nBEGIN;\nSELECT stock FROM inventory WHERE product_id = 42 FOR UPDATE;\n-- ...业务判断 + 下单落库...\nUPDATE inventory SET stock = stock - 1 WHERE product_id = 42;\nCOMMIT;\n\n-- ③ 乐观锁：读时不锁, 写时校验版本\nUPDATE inventory SET stock = stock - 1, version = version + 1\n WHERE product_id = 42 AND version = 7;\n-- 受影响行数 0 = 有人抢先了 -> 读最新版重试\n\n-- 反例: 事务里调 LLM(10秒+) -> 连接池被拖垮\n-- 正确做法: 模型调用放事务外, 只把落库/扣费包进短事务"
+    },
+    "related": [
+      "mvcc",
+      "postgresql",
+      "sqlalchemy",
+      "spring-boot"
+    ],
+    "extended": "进阶方向：《A Critique of ANSI SQL Isolation Levels》、PG 快照隔离 vs InnoDB RR 的实现差异、分布式事务（2PC/SAGA）入门",
+    "image": "images/transaction-isolation.png"
   },
   {
     "id": "redis",

@@ -235,17 +235,28 @@
         var chips = document.createElement("div");
         chips.className = "related-chips";
         c.related.forEach(function (rid) {
+          var chip = document.createElement("button");
+          chip.className = "related-chip";
           var target = concepts.find(function (x) {
             return x.id === rid;
           });
-          if (!target) return;
-          var chip = document.createElement("button");
-          chip.className = "related-chip";
-          chip.textContent = "→ " + target.name;
-          chip.addEventListener("click", function () {
-            openModal(target);
-            document.querySelector(".modal").scrollTo(0, 0);
-          });
+          if (target) {
+            chip.textContent = "→ " + target.name;
+            chip.addEventListener("click", function () {
+              openModal(target);
+              document.querySelector(".modal").scrollTo(0, 0);
+            });
+          } else {
+            var tut = tutorials.find(function (x) {
+              return x.id === rid;
+            });
+            if (!tut) return;
+            chip.textContent = "📄 " + tut.title;
+            chip.addEventListener("click", function () {
+              closeModal();
+              openTutorial(tut);
+            });
+          }
           chips.appendChild(chip);
         });
         nav.appendChild(chips);
