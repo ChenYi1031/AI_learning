@@ -12,7 +12,66 @@
   var filterBar = document.getElementById("filterBar");
   var searchInput = document.getElementById("searchInput");
   var countBadge = document.getElementById("countBadge");
+  var learnedBadge = document.getElementById("learnedBadge");
+  var reviewView = document.getElementById("reviewView");
   var backdrop = document.getElementById("modalBackdrop");
+
+  /* ---------- 学习进度（localStorage + Leitner 间隔重复） ---------- */
+  var PROG_KEY = "ail_progress_v1";
+  var INTERVALS_D = [0, 1, 3, 7, 14, 30]; // box 1~5 对应的复习间隔（天）
+  var DAY_MS = 86400000;
+  var prog = loadProg();
+
+  function loadProg() {
+    try {
+      return JSON.parse(localStorage.getItem(PROG_KEY)) || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveProg() {
+    try {
+      localStorage.setItem(PROG_KEY, JSON.stringify(prog));
+    } catch (e) { /* 隐私模式等场景下静默降级 */ }
+  }
+  function isLearned(id) {
+    return !!(prog[id] && prog[id].box > 0);
+  }
+  function learnedCount() {
+    return concepts.filter(function (c) {
+      return isLearned(c.id);
+    }).length;
+  }
+  function dueCount() {
+    var now = Date.now();
+    return concepts.filter(function (c) {
+      return prog[c.id] && prog[c.id].box > 0 && prog[c.id].due <= now;
+    }).length;
+  }
+  function setLearned(id, learned) {
+    if (learned) {
+      prog[id] = prog[id] || { box: 0, due: 0 };
+      prog[id].box = Math.max(prog[id].box, 1);
+      prog[id].due = Date.now() + INTERVALS_D[prog[id].box] * DAY_MS;
+    } else {
+      delete prog[id];
+    }
+    saveProg();
+    updateLearnedBadge();
+    refreshCardLearnState(id);
+  }
+  function updateLearnedBadge() {
+    if (!concepts.length) return;
+    learnedBadge.textContent = "已学 " + learnedCount() + "/" + concepts.length;
+  }
+  function refreshCardLearnState(id) {
+    var btn = grid.querySelector('.card-learn[data-id="' + id + '"]');
+    if (btn) {
+      var card = btn.closest(".card");
+      card.classList.toggle("learned", isLearned(id));
+      btn.textContent = isLearned(id) ? "✓" : "☆";
+    }
+  }
 
   /* ---------- 数据加载 ---------- */
   fetch("concepts.json")
@@ -24,6 +83,8 @@
       concepts = data;
       buildFilterBar();
       render();
+      updateLearnedBadge();
+      if (++dataReady === 2) applyRoute();
     })
     .catch(function (e) {
       grid.innerHTML =
@@ -107,6 +168,18 @@
       });
       wrap.appendChild(img);
 
+      var learnBtn = document.createElement("button");
+      learnBtn.className = "card-learn";
+      learnBtn.dataset.id = c.id;
+      learnBtn.textContent = isLearned(c.id) ? "✓" : "☆";
+      learnBtn.title = isLearned(c.id) ? "取消已学标记" : "标记为已学";
+      learnBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        setLearned(c.id, !isLearned(c.id));
+      });
+      wrap.appendChild(learnBtn);
+      if (isLearned(c.id)) card.classList.add("learned");
+
       var body = document.createElement("div");
       body.className = "card-body";
       var title = document.createElement("h3");
@@ -151,7 +224,8 @@
   });
 
   /* ---------- 详情模态框 ---------- */
-  function openModal(c) {
+  function openModal(c, opts) {
+    openConceptId = c.id;
     var img = document.getElementById("modalImg");
     img.src = c.image || PLACEHOLDER;
     img.alt = c.name + " 示意图";
@@ -160,6 +234,14 @@
     };
     document.getElementById("modalTag").textContent = c.category;
     document.getElementById("modalTitle").textContent = c.name;
+    var learnBtn = document.getElementById("modalLearn");
+    learnBtn.textContent = isLearned(c.id) ? "✓ 已学" : "☆ 标记已学";
+    learnBtn.classList.toggle("on", isLearned(c.id));
+    learnBtn.onclick = function () {
+      setLearned(c.id, !isLearned(c.id));
+      learnBtn.textContent = isLearned(c.id) ? "✓ 已学" : "☆ 标记已学";
+      learnBtn.classList.toggle("on", isLearned(c.id));
+    };
 
     var body = document.getElementById("modalBody");
     body.innerHTML = "";
@@ -268,6 +350,7 @@
     backdrop.hidden = false;
     document.body.style.overflow = "hidden";
     document.getElementById("modalClose").focus();
+    syncHash("concept=" + c.id, opts);
   }
 
   function bulletList(items, cls) {
@@ -298,17 +381,266 @@
     return p;
   }
 
-  function closeModal() {
+  var openConceptId = null;
+  var openTutorialId = null;
+
+  function closeModal(opts) {
     backdrop.hidden = true;
+    openConceptId = null;
     document.body.style.overflow = "";
+    syncHash("", opts);
   }
 
-  document.getElementById("modalClose").addEventListener("click", closeModal);
+  document.getElementById("modalClose").addEventListener("click", function () {
+    closeModal();
+  });
   backdrop.addEventListener("click", function (e) {
     if (e.target === backdrop) closeModal();
   });
+
+  /* ==========================================================
+     hash 路由：#concept=<id> / #tutorial=<id> / #projects 等
+     ========================================================== */
+  var lastAppliedHash = null;
+
+  function currentHash() {
+    return decodeURIComponent((location.hash || "").replace(/^#\/?/, ""));
+  }
+
+  function syncHash(h, opts) {
+    if (opts && opts.fromRoute) return;
+    if (h === currentHash()) {
+      lastAppliedHash = h;
+      return;
+    }
+    lastAppliedHash = h;
+    if (!h) {
+      history.replaceState(null, "", location.pathname + location.search);
+    } else {
+      location.hash = h;
+    }
+  }
+
+  function applyHash(h) {
+    lastAppliedHash = h;
+    var parts = {};
+    h.split("&").forEach(function (kv) {
+      var i = kv.indexOf("=");
+      if (i > 0) parts[kv.slice(0, i)] = kv.slice(i + 1);
+      else if (kv) parts[kv] = "1";
+    });
+
+    var view = parts.view ||
+      (parts.projects ? "projects" : parts.paper ? "paper" :
+        parts.review ? "review" : null);
+    if (view && view !== currentView) switchTo(view, { fromRoute: true });
+
+    if (parts.concept) {
+      var c = concepts.find(function (x) {
+        return x.id === parts.concept;
+      });
+      if (c && openConceptId !== c.id) openModal(c, { fromRoute: true });
+    } else if (!backdrop.hidden) {
+      closeModal({ fromRoute: true });
+    }
+
+    if (parts.tutorial) {
+      var t = tutorials.find(function (x) {
+        return x.id === parts.tutorial;
+      });
+      if (t && openTutorialId !== t.id) openTutorial(t, { fromRoute: true });
+    } else if (!readerBackdrop.hidden && !parts.concept) {
+      closeTutorial({ fromRoute: true });
+    }
+  }
+
+  function applyRoute() {
+    applyHash(currentHash());
+  }
+
+  window.addEventListener("hashchange", function () {
+    var h = currentHash();
+    if (h === lastAppliedHash) return; // 自己设置的 hash，已渲染
+    applyHash(h);
+  });
+
+  /* ==========================================================
+     自测复习：闪卡 + Leitner 间隔重复
+     ========================================================== */
+  var review = { queue: [], idx: 0, flipped: false, yes: 0, no: 0 };
+
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i];
+      a[i] = a[j];
+      a[j] = t;
+    }
+    return a;
+  }
+
+  function buildQueue() {
+    var now = Date.now();
+    var due = shuffle(concepts.filter(function (c) {
+      return prog[c.id] && prog[c.id].box > 0 && prog[c.id].due <= now;
+    }));
+    var fresh = shuffle(concepts.filter(function (c) {
+      return !prog[c.id];
+    }));
+    return due.concat(fresh).slice(0, 20);
+  }
+
+  function startReview() {
+    review.queue = buildQueue();
+    review.idx = 0;
+    review.flipped = false;
+    review.yes = 0;
+    review.no = 0;
+    renderReview();
+  }
+
+  function gradeCard(good) {
+    var c = review.queue[review.idx];
+    if (!c) return;
+    var p = prog[c.id] || { box: 0, due: 0 };
+    if (good) {
+      p.box = Math.min(p.box + 1, INTERVALS_D.length - 1);
+      p.due = Date.now() + INTERVALS_D[p.box] * DAY_MS;
+      review.yes++;
+    } else {
+      p.box = 1;
+      p.due = Date.now();
+      review.queue.push(c); // 本轮结尾再来一次
+      review.no++;
+    }
+    prog[c.id] = p;
+    saveProg();
+    updateLearnedBadge();
+    refreshCardLearnState(c.id);
+    review.idx++;
+    review.flipped = false;
+    renderReview();
+  }
+
+  function rvEl(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  }
+
+  function renderReview() {
+    reviewView.innerHTML = "";
+    var L = learnedCount();
+    var D = dueCount();
+    var stats = rvEl("div", "review-stats");
+    stats.appendChild(rvEl("span", "stat-chip c-cyan", "已学 " + L + "/" + concepts.length));
+    stats.appendChild(rvEl("span", "stat-chip c-amber", "今日待复习 " + D));
+    reviewView.appendChild(stats);
+
+    var card = review.queue[review.idx];
+    if (!card) {
+      var done = rvEl("div", "review-done");
+      if (review.queue.length || review.yes + review.no > 0) {
+        done.appendChild(rvEl("div", "rd-icon", "🎉"));
+        done.appendChild(rvEl("p", "rd-title", "本轮完成！"));
+        done.appendChild(rvEl("p", "rd-sub",
+          "记住 " + review.yes + " 张 · 没记住 " + review.no +
+          " 张（没记住的会很快再次出现）"));
+      } else {
+        done.appendChild(rvEl("div", "rd-icon", "🎴"));
+        done.appendChild(rvEl("p", "rd-title",
+          D > 0 ? "有 " + D + " 张卡片到复习时间了" : "用闪卡主动回忆，比重复阅读记得牢"));
+        done.appendChild(rvEl("p", "rd-sub",
+          "正面是概念名，先在脑子里回忆要点，再翻面对答案"));
+      }
+      var start = rvEl("button", "rv-btn primary",
+        review.queue.length || review.yes + review.no > 0 ? "再来一轮" : "开始自测");
+      start.addEventListener("click", startReview);
+      done.appendChild(start);
+      var tip = rvEl("p", "rd-tip",
+        "进度保存在本浏览器（localStorage），复习间隔 1/3/7/14/30 天逐级拉长");
+      done.appendChild(tip);
+      reviewView.appendChild(done);
+      return;
+    }
+
+    var progRow = rvEl("div", "review-progress");
+    progRow.appendChild(rvEl("span", null,
+      "第 " + (review.idx + 1) + " / " + review.queue.length + " 张"));
+    var bar = rvEl("div", "rv-bar");
+    var fill = rvEl("div", "rv-bar-fill");
+    fill.style.width = Math.round(review.idx / review.queue.length * 100) + "%";
+    bar.appendChild(fill);
+    progRow.appendChild(bar);
+    reviewView.appendChild(progRow);
+
+    var fc = rvEl("div", "flashcard" + (review.flipped ? " flipped" : ""));
+    if (!review.flipped) {
+      fc.appendChild(rvEl("span", "fc-tag", card.category));
+      fc.appendChild(rvEl("div", "fc-name", card.name));
+      fc.appendChild(rvEl("p", "fc-hint", "先在脑子里回忆：是什么？解决什么问题？要点有哪些？"));
+      var flipBtn = rvEl("button", "rv-btn primary", "翻面看答案 (空格)");
+      flipBtn.addEventListener("click", function () {
+        review.flipped = true;
+        renderReview();
+      });
+      fc.appendChild(flipBtn);
+    } else {
+      fc.appendChild(rvEl("span", "fc-tag", card.category + " · " + card.name));
+      fc.appendChild(rvEl("p", "fc-summary", card.summary));
+      fc.appendChild(rvEl("p", "fc-desc", card.description));
+      var pts = rvEl("ul", "fc-points");
+      card.points.forEach(function (p) {
+        pts.appendChild(rvEl("li", null, p));
+      });
+      fc.appendChild(pts);
+      var link = rvEl("button", "rv-link", "查看完整卡片 →");
+      link.addEventListener("click", function () {
+        switchTo("concepts", { fromRoute: true });
+        openModal(card);
+      });
+      fc.appendChild(link);
+
+      var grades = rvEl("div", "rv-grades");
+      var noBtn = rvEl("button", "rv-btn danger", "😵 没记住 (1)");
+      noBtn.addEventListener("click", function () {
+        gradeCard(false);
+      });
+      var yesBtn = rvEl("button", "rv-btn primary", "😎 记住了 (2)");
+      yesBtn.addEventListener("click", function () {
+        gradeCard(true);
+      });
+      var skipBtn = rvEl("button", "rv-btn ghost", "跳过");
+      skipBtn.addEventListener("click", function () {
+        review.queue.push(review.queue[review.idx]);
+        review.idx++;
+        review.flipped = false;
+        renderReview();
+      });
+      grades.appendChild(noBtn);
+      grades.appendChild(yesBtn);
+      grades.appendChild(skipBtn);
+      fc.appendChild(grades);
+    }
+    reviewView.appendChild(fc);
+  }
+
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !backdrop.hidden) closeModal();
+    if (currentView !== "review" || reviewView.hidden) return;
+    if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA")) return;
+    if (e.key === " " || e.key === "Enter") {
+      if (!review.flipped && review.queue[review.idx]) {
+        e.preventDefault();
+        review.flipped = true;
+        renderReview();
+      }
+    } else if (review.flipped && e.key === "1") {
+      gradeCard(false);
+    } else if (review.flipped && e.key === "2") {
+      gradeCard(true);
+    }
   });
 
   /* ==========================================================
@@ -316,7 +648,7 @@
      ========================================================== */
   var tutorials = [];
   var currentView = "concepts";
-  var grid = document.getElementById("grid");
+  var dataReady = 0;
   var filterBarWrap = document.getElementById("filterBarWrap");
   var tutorialList = document.getElementById("tutorialList");
   var readerBackdrop = document.getElementById("readerBackdrop");
@@ -330,29 +662,33 @@
     .then(function (data) {
       tutorials = data.tutorials || [];
       if (currentView !== "concepts") renderTutorialList(currentView);
+      if (++dataReady === 2) applyRoute();
     })
     .catch(function () {
       tutorials = [];
+      if (++dataReady === 2) applyRoute();
     });
 
   /* ---------- 视图切换 ---------- */
+  function switchTo(view, opts) {
+    currentView = view;
+    document.querySelectorAll(".view-tab").forEach(function (b) {
+      b.classList.toggle("active", b.dataset.view === view);
+    });
+    var isConcept = view === "concepts";
+    filterBarWrap.hidden = !isConcept;
+    grid.hidden = !isConcept;
+    empty.hidden = true;
+    tutorialList.hidden = !(view === "projects" || view === "paper");
+    reviewView.hidden = view !== "review";
+    if (view === "projects" || view === "paper") renderTutorialList(view);
+    if (view === "review") renderReview();
+    syncHash(view === "concepts" ? "" : view, opts);
+  }
+
   document.querySelectorAll(".view-tab").forEach(function (btn) {
     btn.addEventListener("click", function () {
-      var view = btn.dataset.view;
-      if (view === currentView) return;
-      currentView = view;
-      document.querySelectorAll(".view-tab").forEach(function (b) {
-        b.classList.toggle("active", b === btn);
-      });
-      var isConcept = view === "concepts";
-      filterBarWrap.hidden = !isConcept;
-      grid.hidden = !isConcept;
-      empty.hidden = true;
-      tutorialList.hidden = isConcept;
-      if (!isConcept) {
-        grid.hidden = true;
-        renderTutorialList(view);
-      }
+      switchTo(btn.dataset.view);
     });
   });
 
@@ -415,7 +751,7 @@
   }
 
   /* ---------- 教程阅读器 ---------- */
-  function openTutorial(t) {
+  function openTutorial(t, opts) {
     readerContent.innerHTML = "";
 
     var head = document.createElement("header");
@@ -471,9 +807,11 @@
     });
 
     readerBackdrop.hidden = false;
+    openTutorialId = t.id;
     document.body.style.overflow = "hidden";
     document.querySelector(".reader").scrollTo(0, 0);
     document.getElementById("readerClose").focus();
+    syncHash("tutorial=" + t.id, opts);
   }
 
   function renderBlock(b) {
@@ -629,17 +967,23 @@
     }
   }
 
-  function closeTutorial() {
+  function closeTutorial(opts) {
     readerBackdrop.hidden = true;
+    openTutorialId = null;
     document.body.style.overflow = "";
+    syncHash("", opts);
   }
 
-  document.getElementById("readerClose").addEventListener("click", closeTutorial);
+  document.getElementById("readerClose").addEventListener("click", function () {
+    closeTutorial();
+  });
   readerBackdrop.addEventListener("click", function (e) {
     if (e.target === readerBackdrop) closeTutorial();
   });
   document.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !readerBackdrop.hidden) closeTutorial();
+    if (e.key !== "Escape") return;
+    if (!backdrop.hidden) closeModal();
+    else if (!readerBackdrop.hidden) closeTutorial();
   });
 
   /* ---------- 工具 ---------- */

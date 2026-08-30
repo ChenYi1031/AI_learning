@@ -24,6 +24,7 @@
           <input id="searchInput" type="search" autocomplete="off"
                  placeholder="搜索概念，如 Transformer / RAG / 记忆 …">
         </div>
+        <span class="count-badge learned-badge" id="learnedBadge" title="已学习进度">0/0</span>
         <span class="count-badge" id="countBadge" title="当前显示的概念数量">0</span>
       </div>
     </header>
@@ -31,9 +32,10 @@
     <!-- 视图切换 -->
     <nav class="view-tabs" id="viewTabs">
       <div class="view-tabs-inner">
-        <button class="view-tab active" data-view="concepts">📖 概念图鉴</button>
-        <button class="view-tab" data-view="projects">🛠️ 实战项目</button>
-        <button class="view-tab" data-view="paper">📜 论文精读</button>
+      <button class="view-tab active" data-view="concepts">📖 概念图鉴</button>
+      <button class="view-tab" data-view="projects">🛠️ 实战项目</button>
+      <button class="view-tab" data-view="paper">📜 论文精读</button>
+      <button class="view-tab" data-view="review">🎴 自测复习</button>
       </div>
     </nav>
 
@@ -47,6 +49,7 @@
   <main class="main">
     <div id="grid" class="grid" aria-live="polite"></div>
     <div id="tutorialList" class="tutorial-list" hidden></div>
+    <div id="reviewView" class="review-view" hidden></div>
     <div id="empty" class="empty" hidden>
       <div class="empty-icon">🔍</div>
       <p>没有找到匹配的概念</p>
@@ -62,7 +65,10 @@
         <img id="modalImg" alt="" decoding="async">
       </div>
       <div class="modal-body">
-        <span class="tag" id="modalTag"></span>
+        <div class="modal-top">
+          <span class="tag" id="modalTag"></span>
+          <button class="learn-toggle" id="modalLearn" title="标记为已学">☆ 标记已学</button>
+        </div>
         <h2 id="modalTitle"></h2>
         <div id="modalBody"></div>
       </div>
