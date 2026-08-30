@@ -1,0 +1,1213 @@
+{
+  "tutorials": [
+    {
+      "id": "attention-is-all-you-need",
+      "type": "paper",
+      "title": "Attention Is All You Need 精读",
+      "subtitle": "Transformer 起源论文 · 小白向逐节串讲",
+      "meta": "Vaswani 等 8 人 · Google · arXiv:1706.03762 · 2017-06-12 · 15 页",
+      "link": "https://arxiv.org/abs/1706.03762",
+      "readTime": "约 30 分钟",
+      "intro": "2017 年 6 月，Google 的 8 位工程师发了一篇 15 页的论文，宣布：机器翻译模型里那些复杂的循环、卷积结构全都可以扔掉，只用『注意力』一种机制，效果更好、训练更快。这个架构叫 Transformer——你今天听到的 GPT、DeepSeek、Claude，名字各异，骨架全是它。这篇精读会把论文按小节拆开，每个公式翻译成人话，把你当成完全没读过论文的第一次学习者。",
+      "sections": [
+        {
+          "id": "how-to-read",
+          "title": "0. 开读之前：读这篇论文你需要带什么",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "完全不需要数学或深度学习背景。你只需要带着三个已经认识的词进入正文，它们在你学过的概念卡里都有对应卡片："
+            },
+            {
+              "type": "list",
+              "items": [
+                "Token / 词向量：模型不认识文字，只认识数字（向量）。文字进门先被翻译成向量。",
+                "编码器-解码器：『先读懂，再写出』的两段式结构，翻译任务的经典姿势。",
+                "神经网络层的直观理解：一个可训练的函数加工器，数据流进去，被加权、变换后流出。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "本文的阅读方式",
+              "content": "每个小节的结构都是：先讲『论文在说什么』，再讲『人话是什么意思』，需要的地方配原文摘录（英文原文 + 中文对照）和数字例子。最后有一页自测清单——能答对 5 个问题，这篇论文就算真的读懂了。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "token",
+                "embedding",
+                "encoder-decoder"
+              ],
+              "lead": "正文会反复用到的预备概念（点开可复习）："
+            }
+          ]
+        },
+        {
+          "id": "abstract",
+          "title": "1. 摘要精读：一篇摘要就是一篇浓缩论文",
+          "blocks": [
+            {
+              "type": "quote",
+              "source": "Abstract 原文",
+              "en": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.",
+              "zh": "主流的序列转换（如翻译）模型都基于复杂的循环或卷积神经网络，并包含编码器和解码器。表现最好的模型还会用注意力机制连接编码器和解码器。我们提出一种全新的简单网络架构——Transformer，它完全基于注意力机制，把循环和卷积彻底扔掉了。"
+            },
+            {
+              "type": "text",
+              "content": "这段摘要信息密度极高，拆成四个关键信号来看："
+            },
+            {
+              "type": "list",
+              "items": [
+                "信号一『dispensing with recurrence and convolutions entirely』（彻底抛弃循环与卷积）：当时的共识是注意力只是 RNN 的辅助零件，这篇论文直接宣布：辅助零件可以当主体，其他全删。",
+                "信号二『more parallelizable』（更可并行）：这是动机不是结果——GPU 最擅长同时算一万件事，RNN 偏要一件件排队算，论文要解放 GPU。",
+                "信号三『28.4 BLEU，超过此前最佳（含集成）2 个 BLEU 以上』：BLEU 是机器翻译的自动评分（0~100，越高越好），当年提升 1 分都算大新闻，+2 属于断层领先。",
+                "信号四『3.5 天 / 8 张 GPU』：之前最好的模型要训练几周，训练成本只是文献中最佳模型的零头——效果更好还更便宜。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "论文标题本身就是宣言",
+              "content": "Attention Is All You Need 直译『注意力就是你所需要的一切』。正常的论文标题是描述性的，这个标题是挑衅性的：别人全家桶（RNN+CNN+注意力），我们只要注意力一个。事实证明确实够了。"
+            },
+            {
+              "type": "quote",
+              "source": "Abstract 原文（结果部分）",
+              "en": "Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs.",
+              "zh": "在 WMT 2014 英德翻译任务上，我们的模型取得 28.4 BLEU，超过此前全部最佳结果（包括集成模型）2 个 BLEU 以上。在 WMT 2014 英法翻译任务上，8 张 GPU 训练 3.5 天后，我们的单模型创下 41.8 BLEU 的新纪录。"
+            }
+          ]
+        },
+        {
+          "id": "background",
+          "title": "2. 第 1~2 节：Transformer 之前的世界（为什么要推翻重来）",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "2017 年做机器翻译的标准配方叫 seq2seq：一个 RNN（循环神经网络）当编码器，逐词读完源句子，压缩成一个语义表示；另一个 RNN 当解码器，一个词一个词写出目标语言。中间会加一个注意力模块帮忙『对齐』——翻译『它』的时候回头看源句里『它』指的是哪个词。"
+            },
+            {
+              "type": "text",
+              "content": "这个配方能跑，但有两条与生俱来的枷锁："
+            },
+            {
+              "type": "list",
+              "items": [
+                "枷锁一：必须排队。RNN 处理第 100 个词之前必须先处理完第 99 个——计算天然串行。GPU 有一万张工位，RNN 只用得上一个，剩下的全部闲置。训练慢不是工程问题，是结构问题。",
+                "枷锁二：接力忘事。第 1 个词的信息要经过 99 次传递才能影响第 100 个词的输出，每传一次丢一点（梯度消失），句子一长，开头的信息基本蒸发。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "类比：接力赛 vs 圆桌会议",
+              "content": "RNN 像 100 人接力赛：信息从第 1 棒传到第 100 棒，每棒都可能掉棒。Transformer（自注意力）像 100 人圆桌会议：每个人发言时所有其他人同时在听，任何两个人的距离都是一步。"
+            },
+            {
+              "type": "text",
+              "content": "当时也有并行化更好的卷积路线（ConvS2S），但卷积视野有限，距离 n 的两个词要经过 log n 层才能互相看到，远距离依赖依然要『爬山』。两条路线都只是把注意力当助手。这篇论文的大胆之处在于反过来问：既然干活的都是注意力，那 RNN 和 CNN 留着干什么？"
+            },
+            {
+              "type": "quote",
+              "source": "第 1 节 原文",
+              "en": "...we propose the Transformer, a model architecture eschewing recurrence and relying entirely on an attention mechanism to draw global dependencies between input and output.",
+              "zh": "……我们提出 Transformer：一个摒弃循环结构、完全依靠注意力机制来建立输入与输出之间全局依赖关系的模型架构。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "transformer",
+                "self-attention",
+                "encoder-decoder"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "architecture",
+          "title": "3. 第 3 节：总体架构——一条翻译流水线",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "Transformer 沿用了当时的编码器-解码器框架，但把里面的 RNN 全部换成了注意力层。先看全景图（论文 Figure 1 的文字版）："
+            },
+            {
+              "type": "diagram",
+              "content": "                         ┌──────────────────────────────┐\n  输入句: 『我  爱  猫』     │  编码器 (Encoder) × 6 层堆叠   │\n        │                 │                              │\n        ▼                 │   ┌────────────────────┐     │\n  ┌──────────────┐        │   │  多头自注意力        │     │\n  │ 词向量 Embedding│       │   │   ↓                 │     │\n  │ + 位置编码     │──────▶│   │  前馈网络 FFN        │ ×6  │\n  └──────────────┘        │   │ （每层都有残差+归一化）│     │\n                          │   └────────────────────┘     │\n                          └──────────┬───────────────────┘\n                                     │ 源句理解结果 (K,V)\n                                     ▼\n  目标句已生成: 『I』      ┌──────────────────────────────┐\n        │                 │  解码器 (Decoder) × 6 层堆叠   │\n        ▼                 │                              │\n  Embedding+位置编码       │   带掩码的自注意力 (只看左边)   │\n        │                 │   ↓                          │\n        ▼                 │   交叉注意力 ←──(Q来自解码器,  │\n  ┌──────────────┐        │               K,V来自编码器)  │\n  │ 线性+Softmax  │◀──────│   ↓                          │\n  │ 输出下一个词   │        │   前馈网络 FFN        ×6      │\n  └──────────────┘        └──────────────────────────────┘\n        │\n        ▼\n   『love』 → 循环生成 → 『I love cats』"
+            },
+            {
+              "type": "table",
+              "head": [
+                "超参数",
+                "论文取值",
+                "人话解释"
+              ],
+              "rows": [
+                [
+                  "N（层数）",
+                  "6",
+                  "编码器、解码器各堆 6 层，层层加深理解"
+                ],
+                [
+                  "d_model（模型宽度）",
+                  "512",
+                  "每个词用 512 维向量表示"
+                ],
+                [
+                  "h（注意力头数）",
+                  "8",
+                  "8 个注意力头并行，各管一摊"
+                ],
+                [
+                  "d_k / d_v（每头维度）",
+                  "64",
+                  "每头的 Q/K/V 是 512÷8=64 维"
+                ],
+                [
+                  "d_ff（FFN 内层宽度）",
+                  "2048",
+                  "前馈网络先撑大到 2048 维再压回 512"
+                ],
+                [
+                  "Dropout",
+                  "0.1",
+                  "训练时随机丢弃 10% 防止死记硬背"
+                ]
+              ]
+            },
+            {
+              "type": "text",
+              "content": "一个词的完整旅程：先被切成 token、查词向量表变成 512 维向量、加上位置编码注入顺序信息，然后进入编码器的 6 层流水线——每层先开圆桌会议（自注意力）融合上下文，再进小房间（FFN）独自消化，出来时它已经不再是『孤立的词』，而是带着全句语境的表示。解码器则像看着会议纪要写作文的作者：每写一个词，先看自己已写的部分（掩码自注意力），再查编码器的理解结果（交叉注意力），然后给出下一个词。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "token",
+                "encoder-decoder",
+                "self-attention"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "scaled-dot-product",
+          "title": "4. 3.2.1 缩放点积注意力：全文唯一的核心公式",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "整篇论文最重要的一行字来了。别怕，它只有四个零件，逐个拆完你会发现出奇地朴素："
+            },
+            {
+              "type": "formula",
+              "name": "缩放点积注意力（论文公式 1）",
+              "expr": "Attention(Q, K, V) = softmax( Q·Kᵀ / √dₖ ) · V",
+              "explain": "Q=Query(我在找什么)，K=Key(我有什么标签)，V=Value(我的实际内容)，dₖ=每个头向量维度(64)"
+            },
+            {
+              "type": "list",
+              "items": [
+                "第 1 步 Q·Kᵀ（打分）：每个词的 Query 和所有词的 Key 做点积——点积越大，代表『我想找的』和『它有的』越匹配。得到一张 n×n 的原始分数表。",
+                "第 2 步 ÷√dₖ（降温）：维度越高，点积的数值天然越大（方差约等于维度），大数值会让 softmax 饱和——一个词拿走全部权重，其他词全是 0，梯度消失学不动。除以 √64=8，把分数拉回温和区间。",
+                "第 3 步 softmax（归一化）：把每行分数变成总和为 1 的权重分布——『我应该把百分之几的注意力给每个词』。",
+                "第 4 步 ·V（加权融合）：按权重把所有词的内容向量加权求和，输出就是『融合了全句语境的新表示』。"
+              ]
+            },
+            {
+              "type": "quote",
+              "source": "第 3.2.1 节 原文",
+              "en": "We compute the dot products of the query with all keys, divide each by √dk, and apply a softmax function to obtain the weights on the values.",
+              "zh": "我们计算 query 与所有 key 的点积，每个除以 √dk，再施加 softmax 函数得到作用在 value 上的权重。"
+            },
+            {
+              "type": "text",
+              "content": "数字例子：句子『The cat sat』，处理 cat 这个词时——cat 的 Q 与 The/cat/sat 的 K 分别打分 2.0 / 3.5 / 4.5，除以 8 变成 0.25 / 0.44 / 0.56，softmax 后约为 0.24 / 0.29 / 0.47，于是 cat 的新表示 = 0.24×The + 0.29×cat + 0.47×sat。看到了吗：『sat』权重最大，因为『谁坐在那』这个语义主要跟 sat 有关。"
+            },
+            {
+              "type": "code",
+              "lang": "python",
+              "content": "import numpy as np\n\ndef softmax(x):\n    e = np.exp(x - x.max(-1, keepdims=True))  # 减最大值防溢出\n    return e / e.sum(-1, keepdims=True)\n\ndef attention(Q, K, V):\n    d_k = Q.shape[-1]\n    scores = Q @ K.T / np.sqrt(d_k)  # ①打分 ②除以√dk\n    weights = softmax(scores)        # ③归一化成注意力权重\n    return weights @ V, weights      # ④加权融合\n\nQ = np.random.rand(3, 64)  # 3个词，每个64维\nK, V = np.random.rand(3, 64), np.random.rand(3, 64)\nout, w = attention(Q, K, V)\nprint(np.round(w, 2))  # 每行和为1：每个词的注意力分配表"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "self-attention",
+                "cosine-similarity"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "multi-head",
+          "title": "5. 3.2.2 多头注意力：为什么要开 8 个圆桌",
+          "blocks": [
+            {
+              "type": "formula",
+              "name": "多头注意力（论文公式 2~3）",
+              "expr": "MultiHead(Q,K,V) = Concat(head₁,…,head₈)·Wᴌ    其中 headᵢ = Attention(QWᵢQ, KWᵢK, VWᵢV)",
+              "explain": "把 512 维切成 8 份，每份 64 维各自做一遍注意力，最后拼回来"
+            },
+            {
+              "type": "text",
+              "content": "为什么要多头？因为词与词之间的关系不止一种。『猫追老鼠，它饿了』这句话里：『它』和『猫』是指代关系，『追』和『猫』是主谓关系，『追』和『老鼠』是动宾关系——一组 QKV 只能学出一种打分模式，让 8 组并行学习，每组专注一种模式，最后把 8 份理解拼起来。"
+            },
+            {
+              "type": "quote",
+              "source": "第 3.2.2 节 原文",
+              "en": "Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions.",
+              "zh": "多头注意力允许模型在不同位置的多个表示子空间中共同关注信息。"
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "反直觉之处：多头几乎不增加计算量",
+              "content": "8 个头不是 8 倍成本。512 维切成 8 个 64 维，每个头内部的计算是 (64×64) 的矩阵运算，8 个头加起来的总计算量 ≈ 1 个 512 维头的计算量。相当于把一个大会议室拆成 8 个小会议室——总座位数不变，视角多了 8 倍。"
+            },
+            {
+              "type": "text",
+              "content": "论文还发现一个有趣的细节：多数注意力头呈现出可解释的模式——有的头只盯着相邻词（处理短语），有的头只关注动词（处理语法），还有的头做罕见的『远距离跳转』（处理长距离指代）。这是注意力可解释性研究的起点。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "self-attention",
+                "transformer"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "three-usages",
+          "title": "6. 三种注意力 + FFN + 两个守护者：装配零件",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "同一个注意力模块，在架构里有三种用法，区别只在 Q、K、V 从哪来："
+            },
+            {
+              "type": "table",
+              "head": [
+                "用法",
+                "Q 来自",
+                "K / V 来自",
+                "作用"
+              ],
+              "rows": [
+                [
+                  "自注意力",
+                  "编码器/解码器自己",
+                  "自己",
+                  "每句话内部互相交流，融合上下文"
+                ],
+                [
+                  "交叉注意力",
+                  "解码器当前词",
+                  "编码器的最终输出",
+                  "写作文时查『原文的理解笔记』"
+                ],
+                [
+                  "带掩码的自注意力",
+                  "解码器自己",
+                  "自己（只准看左边）",
+                  "生成时防止偷看未来答案"
+                ]
+              ]
+            },
+            {
+              "type": "text",
+              "content": "掩码是解码器的诚实机制：训练时模型要逐词生成『I love cats』，如果允许看整句，它直接抄答案了。掩码把当前位置右边的分数全部设成 -∞，softmax 后权重为 0——物理上无法作弊，模型只能真正学会『根据上文预测下文』，这个能力就是后来 GPT 的全部秘密。"
+            },
+            {
+              "type": "text",
+              "content": "注意力层负责『交流』，前馈网络（FFN）负责『消化』：每个词离开会议室后独自进入一个小房间，先通过一层 512→2048 的全连接把信息撑开，过一个激活函数，再 2048→512 压回来。公式简单得像 hello world："
+            },
+            {
+              "type": "formula",
+              "name": "逐位置前馈网络（论文公式 4）",
+              "expr": "FFN(x) = max(0, x·W₁+b₁)·W₂ + b₂",
+              "explain": "同一套 W₁/W₂ 用在所有位置上，但每个位置独立计算——相当于对每个词做同样的『深度加工』"
+            },
+            {
+              "type": "text",
+              "content": "最后是两个守护者：残差连接（每个子层的输出都加上它的输入：output = x + SubLayer(x)，给梯度修了一条高速公路，网络再深也能训练）和层归一化 LayerNorm（把每层输出拉回稳定范围，防止数值漂移）。这对组合后来成了所有深度网络的标准配置。"
+            }
+          ]
+        },
+        {
+          "id": "positional-encoding",
+          "title": "7. 3.5 位置编码：给盲人模特发座位号",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "自注意力有个天生缺陷：它对顺序完全无感。『猫追狗』和『狗追猫』在注意力眼里是同一堆词的同一堆两两关系——谁先谁后根本不在公式里。但语序明明改变了一切！所以必须在输入里手工注入位置信息："
+            },
+            {
+              "type": "formula",
+              "name": "正弦位置编码（论文公式 5）",
+              "expr": "PE(pos, 2i)   = sin( pos / 10000^(2i/d_model) )\nPE(pos, 2i+1) = cos( pos / 10000^(2i/d_model) )",
+              "explain": "pos=词的位置(0,1,2…)，i=维度下标。偶数维用正弦，奇数维用余弦"
+            },
+            {
+              "type": "text",
+              "content": "人话版：想象 512 根不同频率的时钟指针。第 0~1 维是秒针（转得快，相邻位置差很多），第 510~511 维是时针（转得慢，长距离才看得出变化）。每个位置 pos 得到一组独一无二的『指针读数』，直接加到词向量上。妙处在于：位置 5 和位置 8 的相对关系（差 3），可以通过固定的线性变换从编码中恢复——模型因此能学会『相对距离』这个概念。"
+            },
+            {
+              "type": "quote",
+              "source": "第 3.5 节 原文",
+              "en": "We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.",
+              "zh": "我们选择正弦版本，因为它可能允许模型外推到比训练时见过的序列更长的情况。"
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "这个决定影响至今：上下文窗口为什么有上限",
+              "content": "模型只训练过 512 个位置的位置编码，推理时来个第 513 个位置的词，它就没见过的指针读数。后来 GPT 用可学习位置编码、LLaMA 用旋转位置编码 RoPE，本质都在回答同一个问题——怎么让模型认识更多位置。你学过的『上下文窗口』概念，技术根源就在这一节。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "context-window",
+                "token",
+                "transformer"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "why-self-attention",
+          "title": "8. 第 4 节：为什么自注意力更好——全文的灵魂表格",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "论文第 4 节用一张表正面回答『凭什么抛弃 RNN 和 CNN』，从三个维度对比三种层。这张表是全文的灵魂，也是后来所有大模型能存在的理论依据："
+            },
+            {
+              "type": "table",
+              "head": [
+                "层类型",
+                "每层计算复杂度",
+                "顺序操作数（并行性）",
+                "最大路径长度（远距离依赖）"
+              ],
+              "rows": [
+                [
+                  "自注意力",
+                  "O(n²·d)",
+                  "O(1) ✅ 完全并行",
+                  "O(1) ✅ 任意两词一步直达"
+                ],
+                [
+                  "循环（RNN）",
+                  "O(n·d²)",
+                  "O(n) ❌ 必须排队",
+                  "O(n) ❌ 信息逐棒传递"
+                ],
+                [
+                  "卷积（CNN）",
+                  "O(k·n·d²)",
+                  "O(1) ✅ 可并行",
+                  "O(logₖ(n)) ⚠️ 要爬 log 层楼"
+                ]
+              ]
+            },
+            {
+              "type": "text",
+              "content": "逐行翻译：并行性一列决定了训练速度——GPU 的本质是同时算一万道题，RNN 强行让 GPU 排队。路径长度一列决定长依赖学习难度——第 1 个词影响第 100 个词，自注意力一步直达，RNN 要传 99 手，CNN 要爬 7 层楼（k=4 时 log₄100≈3.3）。自注意力唯一的劣势是 O(n²)——n 翻倍计算翻四倍，这就是你学过的『长上下文贵』的根源，也是 FlashAttention 等后续工作要优化的目标。"
+            },
+            {
+              "type": "quote",
+              "source": "第 4 节 原文",
+              "en": "A self-attention layer connects all positions with a constant number of sequentially executed operations, whereas a recurrent layer requires O(n) sequential operations.",
+              "zh": "自注意力层用常数次顺序操作连接所有位置，而循环层需要 O(n) 次顺序操作。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "context-window",
+                "token",
+                "self-attention"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "training-results",
+          "title": "9. 第 5~6 节：训练配方与成绩单",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "论文的训练配置放在今天看就是一份『复现说明书』，几个数字值得记住："
+            },
+            {
+              "type": "table",
+              "head": [
+                "项目",
+                "配置",
+                "备注"
+              ],
+              "rows": [
+                [
+                  "数据",
+                  "WMT 2014 英德 450 万句对 / 英法 3600 万句对",
+                  "机器翻译标准比赛数据"
+                ],
+                [
+                  "硬件",
+                  "8 × NVIDIA P100",
+                  "2017 年的卡，单张 16GB 显存"
+                ],
+                [
+                  "时长",
+                  "base 版 12 小时 / big 版 3.5 天",
+                  "此前最佳模型要训练数周"
+                ],
+                [
+                  "优化器",
+                  "Adam，warmup 4000 步",
+                  "先热身上升再衰减的学习率调度，已成行业默认"
+                ],
+                [
+                  "正则",
+                  "Dropout 0.1 + 标签平滑 0.1",
+                  "两招防过拟合"
+                ]
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "小知识：标签平滑（label smoothing）",
+              "content": "训练时不把正确答案的标签设成 100%，而是 90%（剩下 10% 均分给其他答案），逼模型保持『不那么自信』。论文发现这让 BLEU 更高——但它有个副作用：模型输出的概率值从此『失真』（真实正确率 90% 的答案只显示 60% 的置信度）。这是后来 LLM 概率校准问题的历史源头之一。"
+            },
+            {
+              "type": "text",
+              "content": "成绩单：英德翻译 BLEU 28.4，超过此前所有最佳结果（包括模型集成）2 分以上；英法翻译 BLEU 41.8，单模型新纪录；训练成本只有此前最佳模型的一小部分。第 6 节还做了一个今天看来极有预见性的实验：把 Transformer 拿去做英语语法分析（和翻译毫无关系的任务），照样效果好——『这个架构能泛化』的伏笔，三个月后 BERT、一年后 GPT 把这个伏笔变成了整个行业。"
+            }
+          ]
+        },
+        {
+          "id": "aftermath",
+          "title": "10. 读完之后：这篇论文改变了什么 + 自测清单",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "这篇论文的直接产物，构成了你今天看到的整个 AI 行业："
+            },
+            {
+              "type": "list",
+              "items": [
+                "2018.6 GPT-1：只用解码器，『预测下一个词』scaling 的起点",
+                "2018.10 BERT：只用编码器，横扫全部理解类任务",
+                "2020.6 GPT-3：1750 亿参数，in-context learning 现身",
+                "2020.10 ViT：把图片切块当 token，Transformer 统一视觉",
+                "2022.11 ChatGPT：Transformer + RLHF + 产品化 = 亿级用户",
+                "今天：DeepSeek、Claude、Qwen……名字不同，骨架全是 2017 年那 15 页"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "彩蛋：8 位作者的后来",
+              "content": "论文 8 位作者当时全部在 Google，且被认为贡献相等（论文署名不分先后）。此后几年他们陆续离开 Google 创业：Cohere（Jones/Gomez 等负责早期）、Character.AI（Shazeer）、Cohere 创始人、Essential AI、投基金……一文散尽满天星，这也是硅谷著名的『Transformer 八子』故事。"
+            },
+            {
+              "type": "text",
+              "content": "自测清单——下面 5 个问题都能回答，这篇论文就算真的读懂了："
+            },
+            {
+              "type": "list",
+              "items": [
+                "① Transformer 为什么训练比 RNN 快？（答：自注意力 O(1) 顺序操作可完全并行，RNN 是 O(n) 串行）",
+                "② 公式里除以 √dₖ 是干什么的？（答：防止维度大导致点积过大、softmax 饱和、梯度消失）",
+                "③ 8 个头为什么几乎不增加计算量？（答：512 维切成 8×64 维，总计算量近似不变）",
+                "④ 为什么必须加位置编码？（答：注意力对顺序无感，需要注入位置信息区分语序）",
+                "⑤ 交叉注意力的 Q 和 K/V 分别来自哪？（答：Q 来自解码器，K/V 来自编码器输出）"
+              ]
+            },
+            {
+              "type": "text",
+              "content": "下一步学习建议：想看更直观的图解，读 Jay Alammar 的《The Illustrated Transformer》；想动手，跟 Karpathy 的 nanoGPT 从零写一个迷你 GPT（300 行代码）；想深入工程，回头把概念卡里的 FlashAttention、RoPE、KV Cache 三个词查一遍——它们都是这篇论文发表后，工程界对 O(n²) 和位置编码两大遗留问题的回答。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "transformer",
+                "self-attention",
+                "prompt-engineering",
+                "context-window"
+              ],
+              "lead": "继续深入这些概念："
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-cs-robot",
+      "type": "project",
+      "title": "实战一：智能客服知识库机器人",
+      "subtitle": "RAG 全家桶 + Function Calling 的企业级落地",
+      "meta": "难度 ★★★☆☆ · 串讲 16 个概念 · 企业 AI 落地率最高的项目形态",
+      "readTime": "约 25 分钟",
+      "intro": "这是你大概率会接到的第一个真实需求：『给公司做一个能回答制度/产品问题的机器人』。本项目带你从零设计一个生产级智能客服：文档怎么变成知识库、一次提问的完整链路有 10 步、每一环用什么技术为什么、怎么从 62% 准确率优化到 88%、上线后出过哪些事故。读完你会发现：概念卡里的十几个知识点，在这一个项目里全部串起来了。",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "1. 需求与架构：先想清楚再动手",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "需求来自 HR 和客服部：员工经常问『年假有几天』『发票丢了怎么报销』这类问题，人工客服疲于应付。目标：机器人能基于《员工手册》《财务制度》等文档准确回答，答不上来要诚实转人工，绝不允许瞎编（制度问题答错会造成真实损失）。"
+            },
+            {
+              "type": "text",
+              "content": "由此推出四条硬性设计约束，每条都决定了技术选型："
+            },
+            {
+              "type": "list",
+              "items": [
+                "制度文档每季度更新 → 知识必须外置可随时替换 → 选 RAG 架构而不是微调",
+                "答错制度会误导员工 → 必须可溯源、检索不到要承认 → 引用标注 + 兜底话术 + 转人工",
+                "员工还会说『帮我查下我的工资条』→ 光会答题不够，要能办业务 → Function Calling 工具层",
+                "并发几百人同时问 → 成本和限流要控制 → Redis 缓存 + 网关限流 + 小模型分级"
+              ]
+            },
+            {
+              "type": "diagram",
+              "content": "用户(飞书/Web)\n    │ HTTPS\n    ▼\n┌─────────────┐     ┌──────────────────────────────┐\n│ 网关层        │     │  Python Agent 服务            │\n│ 鉴权·限流·日志 │────▶│  ┌──────────────────────┐   │\n└─────────────┘     │  │ ①查询改写(指代消解)     │   │\n                    │  │ ②混合检索(向量+BM25)    │   │\n┌─────────────┐     │  │ ③重排 Top5            │   │\n│ Redis        │◀───│  │ ④相关度阈值判断        │   │\n│ 答案缓存      │     │  │ ⑤生成(引用约束) 或 工具 │   │\n└─────────────┘     │  └──────────────────────┘   │\n┌─────────────┐     └───────┬──────────────┬───────┘\n│ PostgreSQL   │◀────────────┘              │\n│ 业务数据+向量  │        ┌───────────┐   ┌─▼─────────┐\n│ (pgvector)   │        │ LLM 网关    │   │ 工具集      │\n└─────────────┘        │ 主+备模型    │   │ 工单/HR系统 │\n                       └───────────┘   └───────────┘\n\n【离线链路·独立于在线服务】\n文档PDF → 解析 → 分块(带元数据) → 向量化 → 入库 pgvector"
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "架构设计的两个关键决策",
+              "content": "决策一：向量检索和业务数据同库（pgvector）——『只搜本部门文档』这类权限过滤一条 SQL 搞定，不用维护两套系统。决策二：所有模型调用走统一网关——后来换模型、加备用模型、算成本，都只改一处。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "rag",
+                "project-architecture",
+                "postgresql"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "offline-pipeline",
+          "title": "2. 离线链路：文档怎么变成可检索的知识",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "第一期的最大教训：上线两天后效果极差，排查发现 30% 的『检索失败』根源在数据入库环节——扫描版 PDF 提取出乱码、表格被拍平。知识库质量的上限在数据入库那一刻就决定了。标准工序五步："
+            },
+            {
+              "type": "steps",
+              "items": [
+                "① 文档解析：pypdf 提取文本，扫描页走 OCR；表格转 Markdown 保留结构；清洗页眉页脚和目录噪声。这一步的产出质量要人工抽查 10%。",
+                "② 分块：按标题层级结构化切分，chunk_size≈512 字符、重叠 64；每个块必须带元数据（来源文档、章节、生效日期）——这是后来做『按部门过滤』和『引用溯源』的基础。",
+                "③ 向量化：bge-m3 模型（开源可私有化，中文强），归一化后存 1024 维向量。同一个模型要用到底，升级模型=全量重建。",
+                "④ 入库：pgvector 表 + HNSW 索引；元数据列（部门/文档类型/生效状态）建普通索引。",
+                "⑤ 入库评测：先拿 30 个真实问题测召回率再上线——这一步是我们后来才补的，强烈建议从第一天就做。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "真实事故：更新了文档但用户搜不到",
+              "content": "上线一个月后 HR 反馈新政策查不到。排查发现：新文档入库了，但旧版文档没下架，旧政策排在前面。修复：元数据加『生效状态』字段，入库脚本先标记旧版失效；检索默认过滤生效中的文档。教训：知识库不是一锤子买卖，要有运营机制。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "document-parsing",
+                "chunking",
+                "embedding-model",
+                "vector-database"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "online-pipeline",
+          "title": "3. 在线链路：一次提问的完整旅程（10 步）",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "用户问『那上次说的报销流程是啥来着』，系统内部发生的事情按顺序是："
+            },
+            {
+              "type": "steps",
+              "items": [
+                "① 鉴权与限流：网关验证用户身份，Redis 计数器限制每人每分钟 5 问（防爬虫防刷），命中限流直接礼貌拒绝。",
+                "② 缓存命中检查：对问题做语义缓存查询（embedding 相似度 >0.95 视为相同问题），命中直接返回缓存答案，本次 0 成本。日常命中率约 40%。",
+                "③ 查询改写：多轮对话里『上次说的』『它』必须消解——改写模型结合对话历史输出独立完整的问题『员工差旅报销的流程和所需材料』。这步让多轮对话的检索召回率从 41% 提到 79%。",
+                "④ 混合检索：向量检索（语义相似）+ BM25（关键词精确）各取 Top-30，RRF 融合。为什么必须混合：员工问『ERROR_4021 怎么处理』时纯向量检索把错误码切碎了，全靠 BM25 精确命中。",
+                "⑤ 重排：Cross-Encoder（bge-reranker-v2-m3）对融合后的候选精读打分，取 Top-5。真答案从平均第 14 名提到第 1.8 名。",
+                "⑥ 相关度阈值判断：最高重排分数 <0.35 → 判定知识库没有可靠答案 → 不调用 LLM 硬答，直接返回『知识库中未找到，已为您转人工』并创建工单。这道闸门是零幻觉承诺的关键。",
+                "⑦ 上下文组装与生成：Top-5 块做句子级压缩（去无关句），填入强约束 prompt：『仅根据资料回答，标注引用编号，资料不足说不知道』。生成模型用主力档（非旗舰）——在忠实性约束下，便宜模型够用。",
+                "⑧ 业务操作分支：改写时意图分类若判定为『操作类』（查工资条、提交报销），不走检索，改走 Function Calling：把工具 schema 给模型 → 模型输出调用请求 → Java 业务系统执行 → 结果回传生成回答。敏感操作（提交报销）二次确认。",
+                "⑨ 响应返回：答案 + 引用来源（点击可看原文块）+ 『转人工』按钮。全部流式输出，首 token 延迟 0.9 秒。",
+                "⑩ 日志与评测埋点：整条链路（改写前后 query、检索命中、重排分数、生成答案、用户反馈）按 trace_id 落库。每天抽样 50 条跑忠实度/相关性评分，指标劣化自动告警。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "为什么是这个顺序",
+              "content": "便宜的判断放前面（缓存→阈值→意图路由），贵的操作放后面（LLM 生成）。40% 的请求在第 ② 步就返回了，20% 在第 ⑥ 步转人工，真正消耗 LLM 的只有 40%——这套漏斗让单月成本只有『全量调旗舰模型』方案的十分之一。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "query-rewrite",
+                "hybrid-search",
+                "rerank",
+                "function-calling",
+                "loop-guard"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "code-skeleton",
+          "title": "4. 核心代码骨架（可运行的简化版）",
+          "blocks": [
+            {
+              "type": "code",
+              "lang": "python",
+              "content": "# ===== 离线：文档入库 =====\ndef ingest(pdf_path, dept):\n    text = parse_pdf(pdf_path)                # 解析+清洗\n    chunks = structural_split(text, size=512, overlap=64)\n    for ch in chunks:\n        ch.meta.update({'dept': dept, 'active': True})\n    vecs = embed_model.encode([c.text for c in chunks],\n                              normalize_embeddings=True)\n    db.insert_chunks(chunks, vecs)            # pgvector + 元数据\n\n# ===== 在线：10 步链路 =====\nasync def answer(user, question, history):\n    if not rate_limit_ok(user):               # ①限流\n        return '提问太频繁，请稍后再试'\n\n    if (hit := semantic_cache.get(question)):  # ②缓存\n        return hit\n\n    query = rewrite(question, history)         # ③指代消解\n    if classify(query) == '操作类':            # ⑧工具分支\n        return await tool_flow(query, user)\n\n    docs = rrf_fuse(vector_search(query, 30),  # ④混合检索\n                    bm25_search(query, 30))\n    top = rerank(query, docs)[:5]              # ⑤重排\n\n    if top[0].score < 0.35:                    # ⑥兜底闸门\n        return escalate_to_human(user, query)\n\n    ctx = compress([d.text for d in top], query)  # ⑦压缩\n    answer = llm.chat(f'''仅根据资料回答并标注[引用编号]。\n资料：{ctx}\\n问题：{query}\n资料不足时回答\"未找到\"。''')\n\n    log_trace(user, question, query, top, answer)  # ⑩埋点\n    semantic_cache.put(question, answer)\n    return answer_with_citations(answer, top)"
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "读代码的方法",
+              "content": "不要从第一行读到最后一行——先看 answer() 的主链路（每行注释编号对应上一节的 10 步），理解骨架后再深入每个函数。生产代码 = 这 40 行骨架 + 每个函数内部 3 倍的异常处理和边界情况。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "rag",
+                "asyncio",
+                "http-retry"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "optimization",
+          "title": "5. 优化实录：两个月从 62% 到 88%",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "上线初期基于 80 条真实员工问题做评测，准确率 62%。此后每一次改动都先跑评测集再上线，全程两个月，节奏如下："
+            },
+            {
+              "type": "table",
+              "head": [
+                "改动",
+                "准确率",
+                "耗时",
+                "一句话结论"
+              ],
+              "rows": [
+                [
+                  "基线：纯向量检索，chunk=1024",
+                  "62%",
+                  "—",
+                  "凑合能用，远不到上线标准"
+                ],
+                [
+                  "+ 混合检索（向量+BM25+RRF）",
+                  "71%",
+                  "2 天",
+                  "性价比最高的一步，专治精确词查询"
+                ],
+                [
+                  "chunk 调成 512 + 按标题结构化分块",
+                  "78%",
+                  "1 周",
+                  "分块质量决定检索上限"
+                ],
+                [
+                  "+ 重排（bge-reranker）",
+                  "85%",
+                  "2 天",
+                  "第二大性价比，精排喂好料"
+                ],
+                [
+                  "+ 查询改写（多轮指代消解）",
+                  "88%",
+                  "4 天",
+                  "多轮场景的命门"
+                ],
+                [
+                  "换旗舰模型重测",
+                  "88.5%",
+                  "半天",
+                  "检索修好后换模型几乎没提升！"
+                ]
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "最重要的发现",
+              "content": "最后一行是整个项目的分水岭时刻：基线 62% 时我们以为换 GPT-4 就能解决，实测只提升到 68%；而把检索链路修好后，便宜模型也到了 88%。结论刻进团队 DNA：RAG 效果差，先修检索，再谈模型。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "rag-evaluation",
+                "challenges-optimization",
+                "model-selection"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "postmortem",
+          "title": "6. 事故复盘：三个让我们半夜爬起来的故障",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "事故一『机器人自信地胡说』：上线第 3 天，机器人回答了一个已废除的报销标准。根因：新旧文档同时在线。修复：元数据生效状态过滤 + 每周知识库巡检。后来我们加了一条铁律——答案必须带引用，无引用的答案直接拦截不上线。",
+                "事故二『转人工风暴』：某周一早 9 点转人工率从 8% 飙到 60%。根因：周五发的考核新文档用了大量内部黑话，查询改写不认识，检索全偏。修复：把黑话表加入改写 prompt；建立『高频未命中问题』周报，48 小时内补文档。",
+                "事故三『一晚烧掉半月预算』：某第三方接入方循环调用接口（死循环 bug），一晚消耗 40% 月度 token 预算。修复：网关加用户级日配额 + 全局预算熔断（月消耗 80% 自动告警、95% 降级到缓存答案）。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "复盘的共同规律",
+              "content": "三个事故都不是『模型不够聪明』，而是工程护栏缺失。AI 项目的稳定性 80% 靠工程，20% 才靠模型——这也是为什么本项目的概念串讲里，工程类概念（限流、熔断、日志）和算法类概念同样重要。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "hallucination",
+                "fault-tolerance",
+                "logging-monitoring",
+                "evaluation-metrics"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "summary",
+          "title": "7. 全项目知识点地图",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "这个项目把概念图鉴里 16 个知识点串成了一条真实的生产链路。按角色重新过一遍——"
+            },
+            {
+              "type": "list",
+              "items": [
+                "数据侧：文档解析 → 分块 → Embedding 模型 → 向量数据库",
+                "检索侧：查询改写 → 混合检索 → 重排 → 上下文压缩",
+                "生成侧：RAG → 幻觉防治 → Prompt Engineering → Function Calling",
+                "工程侧：FastAPI + asyncio 并发 → HTTP 重试 → Redis 缓存限流 → 容错降级",
+                "运营侧：死循环/预算护栏 → 日志监控 → RAG 评估 → 成本指标"
+              ]
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "rag",
+                "query-rewrite",
+                "hybrid-search",
+                "rerank",
+                "function-calling",
+                "rag-evaluation",
+                "hallucination",
+                "fault-tolerance",
+                "logging-monitoring",
+                "evaluation-metrics",
+                "challenges-optimization",
+                "document-parsing",
+                "chunking",
+                "embedding-model",
+                "vector-database",
+                "project-architecture"
+              ],
+              "lead": "点击任意概念复习（本项目完整知识点地图）："
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-llm-gateway",
+      "type": "project",
+      "title": "实战二：企业级 LLM 统一网关",
+      "subtitle": "模型路由 · 缓存 · 限流 · 主备容灾的工程底座",
+      "meta": "难度 ★★★★☆ · 串讲 11 个概念 · 所有 AI 应用的公共地基",
+      "readTime": "约 18 分钟",
+      "intro": "当公司里第三个团队各自直连 OpenAI/DeepSeek 时，你会遇到经典三连：API Key 满天飞没法审计、某团队一晚烧光预算、OpenAI 抽风全线业务瘫痪。LLM 网关就是把所有模型调用收口到一个统一入口：换模型改一处、成本看得见、故障自动切。它没有炫酷的算法，全是工程功夫——却是 AI 基础设施里回报率最高的一块砖。",
+      "sections": [
+        {
+          "id": "why-gateway",
+          "title": "1. 为什么必须收口：三个真实痛点",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "痛点一·失控的成本：各团队直连模型，月底账单汇总没人说得清谁花的、花在哪。收口后：每个请求打标（团队/功能/场景），成本按维度实时可查。",
+                "痛点二·脆弱的单点：某天 OpenAI 区域性故障 4 小时，直连它的三个业务全部瘫痪。收口后：网关自动把流量切到 DeepSeek，业务无感。",
+                "痛点三·重复的轮子：每个团队都自己写重试、超时、日志——质量参差。收口后：重试/限流/日志在网关做一次，全员受益。"
+              ]
+            },
+            {
+              "type": "diagram",
+              "content": " 业务A(客服)   业务B(营销)   业务C(内部工具)\n      │            │            │\n      └────────────┼────────────┘\n                   ▼\n        ┌─────────────────────┐\n        │    LLM 统一网关       │\n        │ ①鉴权+按团队限流       │\n        │ ②语义缓存(命中即返回)   │\n        │ ③模型路由(任务→模型)    │\n        │ ④熔断+主备切换          │\n        │ ⑤重试(指数退避)         │\n        │ ⑥计费埋点(团队/功能)     │\n        └──────┬───────┬───────┬─┘\n               ▼       ▼       ▼\n           OpenAI   DeepSeek   Qwen(备用)\n           (主力)    (主力备)    (降级备)\n               │       │       │\n               └───────┼───────┘\n                       ▼\n              PostgreSQL(调用日志/成本)\n              Redis(缓存/限流计数/熔断状态)"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "model-selection",
+                "llm-api",
+                "project-architecture"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "request-flow",
+          "title": "2. 一次调用的完整链路（8 步）",
+          "blocks": [
+            {
+              "type": "steps",
+              "items": [
+                "① 鉴权与打标：业务方拿网关签发的 key（不是模型厂商的 key）调用，请求头带 team/feature 标签，后面所有计费统计靠它。",
+                "② 团队级限流：Redis 滑动窗口，每团队每分钟 QPS 上限 + 每日 token 预算，超限返回 429 并带上 Retry-After。这一步防止某个 bug 团队把全公司配额烧光。",
+                "③ 语义缓存：问题向量化后查缓存库，相似度 >0.95 直接返回（标注 X-Cache: hit）。热点问答场景命中率 30~50%，是回报最高的优化。",
+                "④ 模型路由：按请求头里的任务类型路由——classify/extract → mini 档，agent → 旗舰，reasoning → 推理模型。路由表配置化，业务方不用关心模型名。",
+                "⑤ 熔断检查：每个上游模型维护熔断器（连续 5 次失败 → 打开 30 秒）。熔断打开时该模型的请求直接走备用，不做无谓尝试。",
+                "⑥ 真实调用 + 重试：按指数退避重试（429 读 Retry-After，5xx 退避 1s/2s/4s），非幂等请求带幂等键。单次调用超时 120 秒。",
+                "⑦ 失败降级链：主力模型重试耗尽 → 备用模型 → 降级标记（响应头 X-Degraded: true，业务方可选择提示用户）→ 仍失败返回结构化错误。",
+                "⑧ 计费与审计落库：模型返回的 usage（输入/输出 token）× 单价 = 本次成本，与团队/功能标签一起写 PostgreSQL。看板每天自动汇总。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "一个容易忽略的细节",
+              "content": "网关要透传流式响应（SSE）时，重试就复杂了——已经开始往下游吐 token 的请求不能重试（用户看到了半截回答）。所以重试只对『首 token 之前』的失败生效，这个边界要在网关里显式处理。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "http-retry",
+                "fault-tolerance",
+                "redis",
+                "logging-monitoring"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "gateway-code",
+          "title": "3. 核心代码骨架",
+          "blocks": [
+            {
+              "type": "code",
+              "lang": "python",
+              "content": "# FastAPI 网关核心路由（简化）\n@app.post('/v1/chat')\nasync def chat(req: ChatReq, team: Team = Depends(auth)):\n    if not limiter.allow(team.id, req.feature):     # ①②限流\n        raise HTTPException(429, 'rate limited')\n\n    if (hit := cache.get(req.messages)):            # ③缓存\n        return hit\n\n    model = route_table.pick(req.task,              # ④路由\n                             req.preferred_model)\n    for candidate in fallback_chain(model):         # ⑤⑦主备链\n        if breaker(candidate).open:                 # 熔断检查\n            continue\n        try:\n            resp = await with_retry(call_upstream,  # ⑥重试\n                                    candidate, req)\n            breaker(candidate).record_success()\n            break\n        except UpstreamError:\n            breaker(candidate).record_fail()\n    else:\n        return degraded_response(req)               # 全挂：降级\n\n    billing.log(team, req.feature, resp.usage,      # ⑧计费\n                candidate.name)\n    cache.put(req.messages, resp)\n    return resp\n\n# 路由表（配置化，业务方无感）\nROUTE = {\n    'classify':  'deepseek-chat',      # 轻任务：便宜快\n    'extract':   'deepseek-chat',\n    'chat':      'deepseek-chat',\n    'agent':     'gpt-4o',             # 函数调用强\n    'reasoning': 'deepseek-reasoner',  # 深度推理\n}"
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "自建还是用开源",
+              "content": "LiteLLM、OneAPI、Higress 等开源网关已覆盖 80% 需求，建议先用开源跑起来，业务特有逻辑（内部计费体系、审计合规）再二次开发。从零自写的理由只有一个：学习——这个项目就是最好的网络编程综合练习。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "fastapi",
+                "asyncio",
+                "pydantic"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "gateway-result",
+          "title": "4. 落地效果与踩坑",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "成本：模型分级路由 + 语义缓存上线后，月度 token 成本降 72%，看板让每个团队的消费一目了然。",
+                "稳定性：一次 OpenAI 全球故障期间，网关 4 分钟完成自动切换，业务方零感知——事后只有计费报表上的模型名变了。",
+                "效率：新业务接入从『申请 key、写适配、做日志』三天变成『领一个网关 key』十分钟。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "踩坑记录",
+              "content": "坑一：语义缓存对个性化回答（带用户名的问候）会串台——缓存 key 必须包含用户上下文的哈希。坑二：模型路由初期把创意写作也路由到了低温 mini 模型，文案质量投诉——路由表要带参数覆写（per-task 的 temperature）。坑三：计费初期漏算了 embedding 调用费，月账单对不上——所有模型类调用（含 embedding/rerank）都必须过网关。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "model-selection",
+                "fault-tolerance",
+                "logging-monitoring",
+                "evaluation-metrics",
+                "redis",
+                "http-retry",
+                "llm-api",
+                "fastapi",
+                "asyncio",
+                "pydantic",
+                "temperature"
+              ],
+              "lead": "点击复习本项目全部知识点："
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-daily-agent",
+      "type": "project",
+      "title": "实战三：竞品监控日报 Agent",
+      "subtitle": "规划 · 状态持久化 · 死循环保护 · 人工审批的工程化全解",
+      "meta": "难度 ★★★★☆ · 串讲 10 个概念 · '数字员工'形态的标准样本",
+      "readTime": "约 18 分钟",
+      "intro": "老板说：『每天早上把三个竞品的动态整理成日报发我』。人肉做：每天 40 分钟；写死脚本做：竞品页面一改版就崩。这个项目用 Agent 工作流解决：LLM 负责每个环节的智能（总结 diff、写摘要），状态机负责流程的可靠（断点恢复、人工审批）。它是理解『Agent 怎么工程化』——而不是怎么炫技——的最佳样本。",
+      "sections": [
+        {
+          "id": "agent-arch",
+          "title": "1. 架构：状态机 + 大模型，各干各的擅长",
+          "blocks": [
+            {
+              "type": "diagram",
+              "content": "  ⏰ CRON 每天 08:00 触发\n        │\n        ▼\n  ┌─ 拉取节点 ─── 爬取 3 个竞品官网/更新日志\n  │      │  （工具: playwright + httpx，超时 30s）\n  │      ▼\n  │  diff 节点 ─── 与昨日快照对比，输出结构化变更\n  │      │  （纯代码，无需 LLM——能不用就不用）\n  │      ▼\n  │  摘要节点 ─── LLM 把变更翻译成人话\n  │      │  （温度 0.3，输出 JSON: 影响评级+摘要）\n  │      ▼\n  │  写表节点 ─── 幂等写入飞书表格（按日期 upsert）\n  │      │\n  │      ▼\n  │  ◆审批卡点 ─── 有重大变更时挂起，等人点头\n  │      │        （状态落盘，批准后从这继续）\n  │      ▼\n  └─ 通知节点 ─── 发送飞书群消息\n\n  全程每步结束 → checkpoint 落盘（可断点恢复）\n  任何步骤 → 失败重试×2 → 仍败 → 告警+跳过标记"
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "设计哲学：LLM 用在刀刃上",
+              "content": "整条链路只有『摘要节点』用了 LLM，其他全是确定性代码。能用 if-else 和 diff 表达的逻辑绝不用模型——便宜、稳定、可测试。LLM 的价值在于处理『爬回来的变更描述五花八门』这种非结构化输入，而不是替你写 if-else。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "workflow-agent",
+                "langgraph",
+                "working-memory"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "agent-flow",
+          "title": "2. 关键设计：让 Agent 三个月不翻车的五个机制",
+          "blocks": [
+            {
+              "type": "steps",
+              "items": [
+                "① 状态持久化：TaskState（goal/plan/done_steps/artifacts）每步执行完序列化落盘。真实收益：第 37 天飞书 API 抽风导致中断，修复后从断点继续，日报照常送达——没有状态的话只能全部重跑。",
+                "② 幂等设计：写表节点按『日期+竞品名』做 upsert 而不是 insert。第 12 天因为告警重跑了两次任务，表格里没有出现重复行。幂等是自动重试的前提。",
+                "③ 护栏三件套：单步超时（爬虫 30s）+ 全局步数上限（8 步，正常 6 步）+ 全局预算上限（单次运行 token ≤2 万）。第 22 天某竞品页面变成无限滚动的瀑布流，爬虫护栏触发，告警而不是无限爬。",
+                "④ 人工审批卡点：『重大变更』（LLM 影响评级=高）不自动发群，挂起等人确认。第 45 天 LLM 把一次普通的定价页改版误判成『重大』，人工把评级改回普通再放行——错误的代价从『全群骚扰』变成『点一下按钮』。",
+                "⑤ 观测与告警：每步日志（输入摘要/输出摘要/耗时/token）落库；连续两天任务失败 → 钉钉告警给维护者。Agent 最大的风险是静默失败——没人知道它已经断了。"
+              ]
+            },
+            {
+              "type": "code",
+              "lang": "python",
+              "content": "# LangGraph 状态机骨架（简化）\nclass State(TypedDict):\n    date: str\n    changes: list          # diff 结果\n    report: dict           # LLM 摘要\n    approved: bool\n    notified: bool\n\ndef fetch(state):        # 拉取节点\n    state['changes'] = crawl_competitors(state['date'])\n    return state\n\ndef summarize(state):    # 摘要节点（唯一用 LLM 的地方）\n    state['report'] = llm(\n        f'对比竞品变更并评估影响：{state[\"changes\"]}',\n        temperature=0.3)\n    return state\n\ndef wait_approval(state):  # 审批卡点：挂起等人\n    if state['report']['impact'] == 'high':\n        state['approved'] = ask_human(state['report'])\n        return state\n    state['approved'] = True\n    return state\n\ng = StateGraph(State)\ng.add_node('fetch', timed(fetch, 30))       # 护栏:超时\ng.add_node('summarize', summarize)\ng.add_node('approve', wait_approval)\ng.add_node('notify', idempotent_notify)     # 护栏:幂等\ng.set_entry_point('fetch')\ng.add_edge('fetch', 'summarize')\ng.add_edge('summarize', 'approve')\ng.add_edge('approve', 'notify')\napp = g.compile(checkpointer=saver)          # 护栏:断点恢复"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "planning",
+                "loop-guard",
+                "react-loop"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "agent-retro",
+          "title": "3. 运行 90 天的复盘",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "数字：90 天运行 88 次成功，2 次失败（竞品改版导致爬虫挂）均被护栏捕获并告警，累计拦截 7 次『重大变更』误判，节省人时约 60 小时。",
+                "成本：每天 LLM 成本约 ¥0.4（只有摘要节点用模型），三个月总成本不到一杯咖啡。",
+                "意外收获：diff 数据沉淀成结构化时间线后，销售开始拿它做竞品应对话术——原始设计的副产品比日报本身更值钱。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "如果重来一次",
+              "content": "最大教训：第一版把『判断是否重大变更』也写成了规则（关键词匹配），漏报率高达 40%——该用 LLM 的地方不要抠。正确的分工是：确定性的事（爬取、diff、写表）用代码，需要理解力的事（评估影响、写人话）用 LLM，需要责任的事（对外发布）留给人。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "workflow-agent",
+                "working-memory",
+                "loop-guard",
+                "logging-monitoring",
+                "fault-tolerance",
+                "llm-api",
+                "http-retry",
+                "tool-use",
+                "langgraph",
+                "planning"
+              ],
+              "lead": "点击复习本项目全部知识点："
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-content-crew",
+      "type": "project",
+      "title": "实战四：多 Agent 内容创作流水线",
+      "subtitle": "调研 → 写作 → 事实核查 → 修订的角色分工实战",
+      "meta": "难度 ★★★☆☆ · 串讲 9 个概念 · 理解多 Agent 协作的代价与收益",
+      "readTime": "约 15 分钟",
+      "intro": "这是四个项目里最『AI 味』的一个：四个 Agent 组成编辑部，自动生产每周 AI 行业周报。它存在的意义除了省时间，更是理解多 Agent 协作的活教材——什么时候值得上多 Agent、消息怎么传、钱怎么算、错误怎么打回。做完这个项目你会对『要不要上多 Agent』有自己的判断。",
+      "sections": [
+        {
+          "id": "crew-topology",
+          "title": "1. 编辑部拓扑：一条带打回环的流水线",
+          "blocks": [
+            {
+              "type": "diagram",
+              "content": "  📋 任务：本周 AI 行业周报\n        │\n        ▼\n  ┌──────────┐   JSON素材包    ┌──────────┐\n  │ 调研 Agent │ ────────────▶ │ 写作 Agent │\n  │ 职责:搜集   │               │ 职责:成稿   │\n  │ 工具:搜索   │               │ 工具:无     │\n  └──────────┘               └────┬─────┘\n                                  │ 初稿\n                                  ▼\n  ┌──────────┐   审稿意见JSON  ┌──────────┐\n  │ 修订 Agent │ ◀──────────── │ 核查 Agent │\n  │ 职责:按意见 │    ┌─ 通过 ── ─│ 职责:挑错   │\n  │ 改稿       │    │           │ 工具:搜索   │\n  └────┬─────┘    │打回(≤2次)  └──────────┘\n       │          └──────────────┘\n       ▼ 通过\n  📤 发布 + 归档到长期记忆(风格库)\n\n  全程消息均为结构化 JSON，禁止自由文本传话"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "multi-agent",
+                "crewai"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "crew-design",
+          "title": "2. 三个关键设计决策",
+          "blocks": [
+            {
+              "type": "steps",
+              "items": [
+                "① 消息结构化：调研 Agent 的产出不是一段话，而是 JSON：{news: [{title, source, url, key_facts}], week_range}。核查 Agent 的意见也是 JSON：{pass: bool, issues: [{type: '事实错误'|'来源缺失'|'过时', location, detail}]}。结构化的好处：下游可以程序化校验，打回意见可以逐条跟踪是否修复。",
+                "② 打回有上限：核查不通过最多打回 2 次，第三次带意见直接发布并标注『未经完全核查』。真实教训：无上限打回时两个 Agent 陷入完美主义拉锯，一篇稿子改了 11 轮、烧了 80 倍成本，质量提升却测不出来。",
+                "③ 记忆复用：发布的每篇周报归档进向量库；调研 Agent 每周开工前检索『过去 4 周写过什么』，避免重复选题。第 5 周开始，重复选题率从 30% 降到 5%。"
+              ]
+            },
+            {
+              "type": "code",
+              "lang": "python",
+              "content": "# CrewAI 四人编辑部（简化）\nresearcher = Agent(\n    role='行业调研员',\n    goal='搜集本周 Top5 AI 新闻并核实来源',\n    backstory='十年科技媒体经验，坚持每条新闻必须有可点击的原始出处',\n    tools=[web_search], verbose=True)\n\nwriter = Agent(\n    role='专栏作者',\n    goal='把素材写成深入浅出的周报',\n    backstory='擅长把技术讲给产品经理听，痛恨堆砌术语')\n\nfact_checker = Agent(\n    role='事实核查员',\n    goal='逐条验证稿件中的事实、数字、来源',\n    backstory='以挑错为乐，宁可错杀不可放过',\n    tools=[web_search])\n\nt1 = Task(description='搜集本周Top5 AI新闻', agent=researcher,\n          expected_output='JSON素材包: {news: [...] }')\nt2 = Task(description='基于素材写800字周报', agent=writer,\n          expected_output='Markdown周报', context=[t1])\nt3 = Task(description='逐条核查事实并输出审稿意见', agent=fact_checker,\n          expected_output='JSON: {pass, issues: [...]}', context=[t2])\nt4 = Task(description='按意见修订，无法修复的删除该句', agent=writer,\n          expected_output='最终版Markdown', context=[t2, t3])\n\nCrew(agents=[researcher, writer, fact_checker],\n     tasks=[t1, t2, t3, t4],\n     process=Process.sequential).kickoff()"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "prompt-engineering",
+                "json-schema-tools",
+                "long-term-memory"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "crew-retro",
+          "title": "3. 一本多 Agent 的经济账（什么时候值得上）",
+          "blocks": [
+            {
+              "type": "table",
+              "head": [
+                "方案",
+                "单篇成本",
+                "端到端延迟",
+                "事实错误率",
+                "维护复杂度"
+              ],
+              "rows": [
+                [
+                  "单 Agent 一把梭（直接生成周报）",
+                  "¥0.3",
+                  "2 分钟",
+                  "11%（编造来源为主）",
+                  "★"
+                ],
+                [
+                  "单 Agent + 自我批评",
+                  "¥0.7",
+                  "4 分钟",
+                  "4%",
+                  "★★"
+                ],
+                [
+                  "四 Agent 流水线（本项目）",
+                  "¥1.6",
+                  "9 分钟",
+                  "1.5%",
+                  "★★★★"
+                ]
+              ]
+            },
+            {
+              "type": "text",
+              "content": "结论读法：多 Agent 的错误率优势真实存在（1.5% vs 4%），但代价是 2.3 倍成本和 4 倍维护复杂度。它值得上的场景：产出直接对外发布、错误代价高（我们后来把核查 Agent 复用到了客户案例校对）；不值得的场景：内部草稿、头脑风暴。一句话决策：先用单 Agent + 自我批评跑到瓶颈，再考虑拆多 Agent。"
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "本项目最值的副产品",
+              "content": "核查 Agent 的 prompt（检查清单：数字对不对/来源可点开吗/是否过时/有没有编造术语）后来被复制到全团队所有产出型任务。多 Agent 实验真正的产出往往不是流水线本身，而是沉淀下来的角色 prompt 资产。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "multi-agent",
+                "self-critique",
+                "reflexion",
+                "long-term-memory",
+                "crewai",
+                "autogen",
+                "prompt-engineering",
+                "evaluation-metrics",
+                "planning"
+              ],
+              "lead": "点击复习本项目全部知识点："
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

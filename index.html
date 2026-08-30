@@ -27,14 +27,24 @@
     </div>
   </header>
 
+  <!-- 视图切换 -->
+  <nav class="view-tabs" id="viewTabs">
+    <div class="view-tabs-inner">
+      <button class="view-tab active" data-view="concepts">📖 概念图鉴</button>
+      <button class="view-tab" data-view="projects">🛠️ 实战项目</button>
+      <button class="view-tab" data-view="paper">📜 论文精读</button>
+    </div>
+  </nav>
+
   <!-- 分类过滤栏 -->
-  <nav class="filter-bar">
+  <nav class="filter-bar" id="filterBarWrap">
     <div class="filter-inner" id="filterBar"></div>
   </nav>
 
   <!-- 概念卡片网格 -->
   <main class="main">
     <div id="grid" class="grid" aria-live="polite"></div>
+    <div id="tutorialList" class="tutorial-list" hidden></div>
     <div id="empty" class="empty" hidden>
       <div class="empty-icon">🔍</div>
       <p>没有找到匹配的概念</p>
@@ -59,6 +69,14 @@
         <div id="modalBody"></div>
       </div>
     </div>
+  </div>
+
+  <!-- 教程阅读器 -->
+  <div class="reader-backdrop" id="readerBackdrop" hidden>
+    <article class="reader" role="article">
+      <button class="reader-close" id="readerClose" aria-label="关闭">&times;</button>
+      <div id="readerContent"></div>
+    </article>
   </div>
 
   <script src="script.js"></script>

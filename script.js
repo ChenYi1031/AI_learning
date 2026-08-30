@@ -299,6 +299,337 @@
     if (e.key === "Escape" && !backdrop.hidden) closeModal();
   });
 
+  /* ==========================================================
+     教程系统：实战项目 / 论文精读
+     ========================================================== */
+  var tutorials = [];
+  var currentView = "concepts";
+  var grid = document.getElementById("grid");
+  var filterBarWrap = document.getElementById("filterBarWrap");
+  var tutorialList = document.getElementById("tutorialList");
+  var readerBackdrop = document.getElementById("readerBackdrop");
+  var readerContent = document.getElementById("readerContent");
+
+  fetch("tutorials.json")
+    .then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return r.json();
+    })
+    .then(function (data) {
+      tutorials = data.tutorials || [];
+      if (currentView !== "concepts") renderTutorialList(currentView);
+    })
+    .catch(function () {
+      tutorials = [];
+    });
+
+  /* ---------- 视图切换 ---------- */
+  document.querySelectorAll(".view-tab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var view = btn.dataset.view;
+      if (view === currentView) return;
+      currentView = view;
+      document.querySelectorAll(".view-tab").forEach(function (b) {
+        b.classList.toggle("active", b === btn);
+      });
+      var isConcept = view === "concepts";
+      filterBarWrap.hidden = !isConcept;
+      grid.hidden = !isConcept;
+      empty.hidden = true;
+      tutorialList.hidden = isConcept;
+      if (!isConcept) {
+        grid.hidden = true;
+        renderTutorialList(view);
+      }
+    });
+  });
+
+  /* ---------- 教程列表 ---------- */
+  function renderTutorialList(view) {
+    var type = view === "projects" ? "project" : "paper";
+    var list = tutorials.filter(function (t) {
+      return t.type === type;
+    });
+    tutorialList.innerHTML = "";
+    if (!list.length) {
+      tutorialList.innerHTML =
+        '<div class="empty"><div class="empty-icon">⚠️</div><p>tutorials.json 加载失败或为空</p></div>';
+      return;
+    }
+    list.forEach(function (t, i) {
+      var card = document.createElement("article");
+      card.className = "tutorial-card";
+      card.style.animationDelay = Math.min(i * 0.06, 0.3) + "s";
+
+      var badge = document.createElement("span");
+      badge.className = "tc-badge";
+      badge.textContent = t.type === "paper" ? "📜 论文精读" : "🛠️ 实战项目";
+
+      var title = document.createElement("h3");
+      title.className = "tc-title";
+      title.textContent = t.title;
+
+      var sub = document.createElement("p");
+      sub.className = "tc-sub";
+      sub.textContent = t.subtitle;
+
+      var intro = document.createElement("p");
+      intro.className = "tc-intro";
+      intro.textContent = t.intro;
+
+      var meta = document.createElement("div");
+      meta.className = "tc-meta";
+      var m1 = document.createElement("span");
+      m1.textContent = "⏱ " + t.readTime;
+      var m2 = document.createElement("span");
+      m2.textContent = "📑 " + t.meta;
+      var go = document.createElement("span");
+      go.className = "tc-go";
+      go.textContent = "开始阅读 →";
+      meta.appendChild(m1);
+      meta.appendChild(m2);
+      meta.appendChild(go);
+
+      card.appendChild(badge);
+      card.appendChild(title);
+      card.appendChild(sub);
+      card.appendChild(intro);
+      card.appendChild(meta);
+      card.addEventListener("click", function () {
+        openTutorial(t);
+      });
+      tutorialList.appendChild(card);
+    });
+  }
+
+  /* ---------- 教程阅读器 ---------- */
+  function openTutorial(t) {
+    readerContent.innerHTML = "";
+
+    var head = document.createElement("header");
+    head.className = "reader-head";
+    var h1 = document.createElement("h1");
+    h1.textContent = t.title;
+    var sub = document.createElement("p");
+    sub.className = "reader-sub";
+    sub.textContent = t.subtitle;
+    var meta = document.createElement("p");
+    meta.className = "reader-meta";
+    meta.textContent = t.meta + " · " + t.readTime;
+    var intro = document.createElement("p");
+    intro.className = "reader-intro";
+    intro.textContent = t.intro;
+    if (t.link) {
+      var link = document.createElement("a");
+      link.className = "reader-link";
+      link.href = t.link;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "📄 查看论文原文（arXiv）↗";
+      head.appendChild(link);
+    }
+    head.appendChild(h1);
+    head.appendChild(sub);
+    head.appendChild(meta);
+    head.appendChild(intro);
+    readerContent.appendChild(head);
+
+    // 顶部目录
+    var toc = document.createElement("nav");
+    toc.className = "reader-toc";
+    t.sections.forEach(function (s, i) {
+      var item = document.createElement("a");
+      item.href = "#sec-" + i;
+      item.textContent = s.title;
+      toc.appendChild(item);
+    });
+    readerContent.appendChild(toc);
+
+    t.sections.forEach(function (s, i) {
+      var sec = document.createElement("section");
+      sec.className = "reader-section";
+      sec.id = "sec-" + i;
+      var h2 = document.createElement("h2");
+      h2.textContent = s.title;
+      sec.appendChild(h2);
+      s.blocks.forEach(function (b) {
+        sec.appendChild(renderBlock(b));
+      });
+      readerContent.appendChild(sec);
+    });
+
+    readerBackdrop.hidden = false;
+    document.body.style.overflow = "hidden";
+    document.querySelector(".reader").scrollTo(0, 0);
+    document.getElementById("readerClose").focus();
+  }
+
+  function renderBlock(b) {
+    switch (b.type) {
+      case "text": {
+        var p = document.createElement("p");
+        p.className = "tb-text";
+        p.textContent = b.content;
+        return p;
+      }
+      case "list": {
+        var ul = document.createElement("ul");
+        ul.className = "tb-list";
+        b.items.forEach(function (it) {
+          var li = document.createElement("li");
+          li.textContent = it;
+          ul.appendChild(li);
+        });
+        return ul;
+      }
+      case "steps": {
+        var ol = document.createElement("ol");
+        ol.className = "tb-steps";
+        b.items.forEach(function (it) {
+          var li = document.createElement("li");
+          li.textContent = it;
+          ol.appendChild(li);
+        });
+        return ol;
+      }
+      case "callout": {
+        var div = document.createElement("div");
+        div.className = "tb-callout tone-" + (b.tone || "info");
+        var strong = document.createElement("strong");
+        strong.textContent = b.title;
+        var cp = document.createElement("p");
+        cp.textContent = b.content;
+        div.appendChild(strong);
+        div.appendChild(cp);
+        return div;
+      }
+      case "quote": {
+        var fig = document.createElement("figure");
+        fig.className = "tb-quote";
+        var src = document.createElement("figcaption");
+        src.textContent = "— " + b.source;
+        var en = document.createElement("p");
+        en.className = "q-en";
+        en.textContent = b.en;
+        fig.appendChild(en);
+        if (b.zh) {
+          var zh = document.createElement("p");
+          zh.className = "q-zh";
+          zh.textContent = "译文：" + b.zh;
+          fig.appendChild(zh);
+        }
+        fig.appendChild(src);
+        return fig;
+      }
+      case "formula": {
+        var f = document.createElement("div");
+        f.className = "tb-formula";
+        var fn = document.createElement("div");
+        fn.className = "f-name";
+        fn.textContent = b.name;
+        var fe = document.createElement("div");
+        fe.className = "f-expr";
+        fe.textContent = b.expr;
+        var fx = document.createElement("p");
+        fx.className = "f-explain";
+        fx.textContent = b.explain;
+        f.appendChild(fn);
+        f.appendChild(fe);
+        f.appendChild(fx);
+        return f;
+      }
+      case "code": {
+        var pre = document.createElement("pre");
+        pre.className = "code-block";
+        var code = document.createElement("code");
+        code.textContent = b.content;
+        pre.appendChild(code);
+        if (b.lang) {
+          var lang = document.createElement("span");
+          lang.className = "lang-badge";
+          lang.textContent = b.lang;
+          pre.appendChild(lang);
+        }
+        return pre;
+      }
+      case "diagram": {
+        var dpre = document.createElement("pre");
+        dpre.className = "tb-diagram";
+        dpre.textContent = b.content;
+        return dpre;
+      }
+      case "table": {
+        var table = document.createElement("table");
+        table.className = "tb-table";
+        var thead = document.createElement("thead");
+        var trh = document.createElement("tr");
+        b.head.forEach(function (h) {
+          var th = document.createElement("th");
+          th.textContent = h;
+          trh.appendChild(th);
+        });
+        thead.appendChild(trh);
+        table.appendChild(thead);
+        var tbody = document.createElement("tbody");
+        b.rows.forEach(function (row) {
+          var tr = document.createElement("tr");
+          row.forEach(function (cell) {
+            var td = document.createElement("td");
+            td.textContent = cell;
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr);
+        });
+        table.appendChild(tbody);
+        return table;
+      }
+      case "concepts": {
+        var wrap = document.createElement("div");
+        wrap.className = "tb-concepts";
+        var lead = document.createElement("div");
+        lead.className = "tc-lead";
+        lead.textContent = b.lead || "相关概念：";
+        var chips = document.createElement("div");
+        chips.className = "related-chips";
+        (b.ids || []).forEach(function (cid) {
+          var target = concepts.find(function (x) {
+            return x.id === cid;
+          });
+          if (!target) return;
+          var chip = document.createElement("button");
+          chip.className = "related-chip";
+          chip.textContent = "→ " + target.name;
+          chip.addEventListener("click", function () {
+            openModal(target);
+          });
+          chips.appendChild(chip);
+        });
+        wrap.appendChild(lead);
+        wrap.appendChild(chips);
+        return wrap;
+      }
+      default: {
+        var fallback = document.createElement("p");
+        fallback.className = "tb-text";
+        fallback.textContent = JSON.stringify(b);
+        return fallback;
+      }
+    }
+  }
+
+  function closeTutorial() {
+    readerBackdrop.hidden = true;
+    document.body.style.overflow = "";
+  }
+
+  document.getElementById("readerClose").addEventListener("click", closeTutorial);
+  readerBackdrop.addEventListener("click", function (e) {
+    if (e.target === readerBackdrop) closeTutorial();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && !readerBackdrop.hidden) closeTutorial();
+  });
+
   /* ---------- 工具 ---------- */
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, function (ch) {

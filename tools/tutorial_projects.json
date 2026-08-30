@@ -1,0 +1,280 @@
+{
+  "tutorials": [
+    {
+      "id": "proj-cs-robot",
+      "type": "project",
+      "title": "实战一：智能客服知识库机器人",
+      "subtitle": "RAG 全家桶 + Function Calling 的企业级落地",
+      "meta": "难度 ★★★☆☆ · 串讲 16 个概念 · 企业 AI 落地率最高的项目形态",
+      "readTime": "约 25 分钟",
+      "intro": "这是你大概率会接到的第一个真实需求：『给公司做一个能回答制度/产品问题的机器人』。本项目带你从零设计一个生产级智能客服：文档怎么变成知识库、一次提问的完整链路有 10 步、每一环用什么技术为什么、怎么从 62% 准确率优化到 88%、上线后出过哪些事故。读完你会发现：概念卡里的十几个知识点，在这一个项目里全部串起来了。",
+      "sections": [
+        {
+          "id": "requirements",
+          "title": "1. 需求与架构：先想清楚再动手",
+          "blocks": [
+            {"type": "text", "content": "需求来自 HR 和客服部：员工经常问『年假有几天』『发票丢了怎么报销』这类问题，人工客服疲于应付。目标：机器人能基于《员工手册》《财务制度》等文档准确回答，答不上来要诚实转人工，绝不允许瞎编（制度问题答错会造成真实损失）。"},
+            {"type": "text", "content": "由此推出四条硬性设计约束，每条都决定了技术选型："},
+            {"type": "list", "items": [
+              "制度文档每季度更新 → 知识必须外置可随时替换 → 选 RAG 架构而不是微调",
+              "答错制度会误导员工 → 必须可溯源、检索不到要承认 → 引用标注 + 兜底话术 + 转人工",
+              "员工还会说『帮我查下我的工资条』→ 光会答题不够，要能办业务 → Function Calling 工具层",
+              "并发几百人同时问 → 成本和限流要控制 → Redis 缓存 + 网关限流 + 小模型分级"
+            ]},
+            {"type": "diagram", "content": "用户(飞书/Web)\n    │ HTTPS\n    ▼\n┌─────────────┐     ┌──────────────────────────────┐\n│ 网关层        │     │  Python Agent 服务            │\n│ 鉴权·限流·日志 │────▶│  ┌──────────────────────┐   │\n└─────────────┘     │  │ ①查询改写(指代消解)     │   │\n                    │  │ ②混合检索(向量+BM25)    │   │\n┌─────────────┐     │  │ ③重排 Top5            │   │\n│ Redis        │◀───│  │ ④相关度阈值判断        │   │\n│ 答案缓存      │     │  │ ⑤生成(引用约束) 或 工具 │   │\n└─────────────┘     │  └──────────────────────┘   │\n┌─────────────┐     └───────┬──────────────┬───────┘\n│ PostgreSQL   │◀────────────┘              │\n│ 业务数据+向量  │        ┌───────────┐   ┌─▼─────────┐\n│ (pgvector)   │        │ LLM 网关    │   │ 工具集      │\n└─────────────┘        │ 主+备模型    │   │ 工单/HR系统 │\n                       └───────────┘   └───────────┘\n\n【离线链路·独立于在线服务】\n文档PDF → 解析 → 分块(带元数据) → 向量化 → 入库 pgvector"},
+            {"type": "callout", "tone": "tip", "title": "架构设计的两个关键决策", "content": "决策一：向量检索和业务数据同库（pgvector）——『只搜本部门文档』这类权限过滤一条 SQL 搞定，不用维护两套系统。决策二：所有模型调用走统一网关——后来换模型、加备用模型、算成本，都只改一处。"},
+            {"type": "concepts", "ids": ["rag", "project-architecture", "postgresql"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "offline-pipeline",
+          "title": "2. 离线链路：文档怎么变成可检索的知识",
+          "blocks": [
+            {"type": "text", "content": "第一期的最大教训：上线两天后效果极差，排查发现 30% 的『检索失败』根源在数据入库环节——扫描版 PDF 提取出乱码、表格被拍平。知识库质量的上限在数据入库那一刻就决定了。标准工序五步："},
+            {"type": "steps", "items": [
+              "① 文档解析：pypdf 提取文本，扫描页走 OCR；表格转 Markdown 保留结构；清洗页眉页脚和目录噪声。这一步的产出质量要人工抽查 10%。",
+              "② 分块：按标题层级结构化切分，chunk_size≈512 字符、重叠 64；每个块必须带元数据（来源文档、章节、生效日期）——这是后来做『按部门过滤』和『引用溯源』的基础。",
+              "③ 向量化：bge-m3 模型（开源可私有化，中文强），归一化后存 1024 维向量。同一个模型要用到底，升级模型=全量重建。",
+              "④ 入库：pgvector 表 + HNSW 索引；元数据列（部门/文档类型/生效状态）建普通索引。",
+              "⑤ 入库评测：先拿 30 个真实问题测召回率再上线——这一步是我们后来才补的，强烈建议从第一天就做。"
+            ]},
+            {"type": "callout", "tone": "warn", "title": "真实事故：更新了文档但用户搜不到", "content": "上线一个月后 HR 反馈新政策查不到。排查发现：新文档入库了，但旧版文档没下架，旧政策排在前面。修复：元数据加『生效状态』字段，入库脚本先标记旧版失效；检索默认过滤生效中的文档。教训：知识库不是一锤子买卖，要有运营机制。"},
+            {"type": "concepts", "ids": ["document-parsing", "chunking", "embedding-model", "vector-database"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "online-pipeline",
+          "title": "3. 在线链路：一次提问的完整旅程（10 步）",
+          "blocks": [
+            {"type": "text", "content": "用户问『那上次说的报销流程是啥来着』，系统内部发生的事情按顺序是："},
+            {"type": "steps", "items": [
+              "① 鉴权与限流：网关验证用户身份，Redis 计数器限制每人每分钟 5 问（防爬虫防刷），命中限流直接礼貌拒绝。",
+              "② 缓存命中检查：对问题做语义缓存查询（embedding 相似度 >0.95 视为相同问题），命中直接返回缓存答案，本次 0 成本。日常命中率约 40%。",
+              "③ 查询改写：多轮对话里『上次说的』『它』必须消解——改写模型结合对话历史输出独立完整的问题『员工差旅报销的流程和所需材料』。这步让多轮对话的检索召回率从 41% 提到 79%。",
+              "④ 混合检索：向量检索（语义相似）+ BM25（关键词精确）各取 Top-30，RRF 融合。为什么必须混合：员工问『ERROR_4021 怎么处理』时纯向量检索把错误码切碎了，全靠 BM25 精确命中。",
+              "⑤ 重排：Cross-Encoder（bge-reranker-v2-m3）对融合后的候选精读打分，取 Top-5。真答案从平均第 14 名提到第 1.8 名。",
+              "⑥ 相关度阈值判断：最高重排分数 <0.35 → 判定知识库没有可靠答案 → 不调用 LLM 硬答，直接返回『知识库中未找到，已为您转人工』并创建工单。这道闸门是零幻觉承诺的关键。",
+              "⑦ 上下文组装与生成：Top-5 块做句子级压缩（去无关句），填入强约束 prompt：『仅根据资料回答，标注引用编号，资料不足说不知道』。生成模型用主力档（非旗舰）——在忠实性约束下，便宜模型够用。",
+              "⑧ 业务操作分支：改写时意图分类若判定为『操作类』（查工资条、提交报销），不走检索，改走 Function Calling：把工具 schema 给模型 → 模型输出调用请求 → Java 业务系统执行 → 结果回传生成回答。敏感操作（提交报销）二次确认。",
+              "⑨ 响应返回：答案 + 引用来源（点击可看原文块）+ 『转人工』按钮。全部流式输出，首 token 延迟 0.9 秒。",
+              "⑩ 日志与评测埋点：整条链路（改写前后 query、检索命中、重排分数、生成答案、用户反馈）按 trace_id 落库。每天抽样 50 条跑忠实度/相关性评分，指标劣化自动告警。"
+            ]},
+            {"type": "callout", "tone": "info", "title": "为什么是这个顺序", "content": "便宜的判断放前面（缓存→阈值→意图路由），贵的操作放后面（LLM 生成）。40% 的请求在第 ② 步就返回了，20% 在第 ⑥ 步转人工，真正消耗 LLM 的只有 40%——这套漏斗让单月成本只有『全量调旗舰模型』方案的十分之一。"},
+            {"type": "concepts", "ids": ["query-rewrite", "hybrid-search", "rerank", "function-calling", "loop-guard"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "code-skeleton",
+          "title": "4. 核心代码骨架（可运行的简化版）",
+          "blocks": [
+            {"type": "code", "lang": "python", "content": "# ===== 离线：文档入库 =====\ndef ingest(pdf_path, dept):\n    text = parse_pdf(pdf_path)                # 解析+清洗\n    chunks = structural_split(text, size=512, overlap=64)\n    for ch in chunks:\n        ch.meta.update({'dept': dept, 'active': True})\n    vecs = embed_model.encode([c.text for c in chunks],\n                              normalize_embeddings=True)\n    db.insert_chunks(chunks, vecs)            # pgvector + 元数据\n\n# ===== 在线：10 步链路 =====\nasync def answer(user, question, history):\n    if not rate_limit_ok(user):               # ①限流\n        return '提问太频繁，请稍后再试'\n\n    if (hit := semantic_cache.get(question)):  # ②缓存\n        return hit\n\n    query = rewrite(question, history)         # ③指代消解\n    if classify(query) == '操作类':            # ⑧工具分支\n        return await tool_flow(query, user)\n\n    docs = rrf_fuse(vector_search(query, 30),  # ④混合检索\n                    bm25_search(query, 30))\n    top = rerank(query, docs)[:5]              # ⑤重排\n\n    if top[0].score < 0.35:                    # ⑥兜底闸门\n        return escalate_to_human(user, query)\n\n    ctx = compress([d.text for d in top], query)  # ⑦压缩\n    answer = llm.chat(f'''仅根据资料回答并标注[引用编号]。\n资料：{ctx}\\n问题：{query}\n资料不足时回答\"未找到\"。''')\n\n    log_trace(user, question, query, top, answer)  # ⑩埋点\n    semantic_cache.put(question, answer)\n    return answer_with_citations(answer, top)"},
+            {"type": "callout", "tone": "tip", "title": "读代码的方法", "content": "不要从第一行读到最后一行——先看 answer() 的主链路（每行注释编号对应上一节的 10 步），理解骨架后再深入每个函数。生产代码 = 这 40 行骨架 + 每个函数内部 3 倍的异常处理和边界情况。"},
+            {"type": "concepts", "ids": ["rag", "asyncio", "http-retry"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "optimization",
+          "title": "5. 优化实录：两个月从 62% 到 88%",
+          "blocks": [
+            {"type": "text", "content": "上线初期基于 80 条真实员工问题做评测，准确率 62%。此后每一次改动都先跑评测集再上线，全程两个月，节奏如下："},
+            {"type": "table", "head": ["改动", "准确率", "耗时", "一句话结论"], "rows": [
+              ["基线：纯向量检索，chunk=1024", "62%", "—", "凑合能用，远不到上线标准"],
+              ["+ 混合检索（向量+BM25+RRF）", "71%", "2 天", "性价比最高的一步，专治精确词查询"],
+              ["chunk 调成 512 + 按标题结构化分块", "78%", "1 周", "分块质量决定检索上限"],
+              ["+ 重排（bge-reranker）", "85%", "2 天", "第二大性价比，精排喂好料"],
+              ["+ 查询改写（多轮指代消解）", "88%", "4 天", "多轮场景的命门"],
+              ["换旗舰模型重测", "88.5%", "半天", "检索修好后换模型几乎没提升！"]
+            ]},
+            {"type": "callout", "tone": "warn", "title": "最重要的发现", "content": "最后一行是整个项目的分水岭时刻：基线 62% 时我们以为换 GPT-4 就能解决，实测只提升到 68%；而把检索链路修好后，便宜模型也到了 88%。结论刻进团队 DNA：RAG 效果差，先修检索，再谈模型。"},
+            {"type": "concepts", "ids": ["rag-evaluation", "challenges-optimization", "model-selection"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "postmortem",
+          "title": "6. 事故复盘：三个让我们半夜爬起来的故障",
+          "blocks": [
+            {"type": "list", "items": [
+              "事故一『机器人自信地胡说』：上线第 3 天，机器人回答了一个已废除的报销标准。根因：新旧文档同时在线。修复：元数据生效状态过滤 + 每周知识库巡检。后来我们加了一条铁律——答案必须带引用，无引用的答案直接拦截不上线。",
+              "事故二『转人工风暴』：某周一早 9 点转人工率从 8% 飙到 60%。根因：周五发的考核新文档用了大量内部黑话，查询改写不认识，检索全偏。修复：把黑话表加入改写 prompt；建立『高频未命中问题』周报，48 小时内补文档。",
+              "事故三『一晚烧掉半月预算』：某第三方接入方循环调用接口（死循环 bug），一晚消耗 40% 月度 token 预算。修复：网关加用户级日配额 + 全局预算熔断（月消耗 80% 自动告警、95% 降级到缓存答案）。"
+            ]},
+            {"type": "callout", "tone": "tip", "title": "复盘的共同规律", "content": "三个事故都不是『模型不够聪明』，而是工程护栏缺失。AI 项目的稳定性 80% 靠工程，20% 才靠模型——这也是为什么本项目的概念串讲里，工程类概念（限流、熔断、日志）和算法类概念同样重要。"},
+            {"type": "concepts", "ids": ["hallucination", "fault-tolerance", "logging-monitoring", "evaluation-metrics"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "summary",
+          "title": "7. 全项目知识点地图",
+          "blocks": [
+            {"type": "text", "content": "这个项目把概念图鉴里 16 个知识点串成了一条真实的生产链路。按角色重新过一遍——"},
+            {"type": "list", "items": [
+              "数据侧：文档解析 → 分块 → Embedding 模型 → 向量数据库",
+              "检索侧：查询改写 → 混合检索 → 重排 → 上下文压缩",
+              "生成侧：RAG → 幻觉防治 → Prompt Engineering → Function Calling",
+              "工程侧：FastAPI + asyncio 并发 → HTTP 重试 → Redis 缓存限流 → 容错降级",
+              "运营侧：死循环/预算护栏 → 日志监控 → RAG 评估 → 成本指标"
+            ]},
+            {"type": "concepts", "ids": ["rag", "query-rewrite", "hybrid-search", "rerank", "function-calling", "rag-evaluation", "hallucination", "fault-tolerance", "logging-monitoring", "evaluation-metrics", "challenges-optimization", "document-parsing", "chunking", "embedding-model", "vector-database", "project-architecture"], "lead": "点击任意概念复习（本项目完整知识点地图）："}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-llm-gateway",
+      "type": "project",
+      "title": "实战二：企业级 LLM 统一网关",
+      "subtitle": "模型路由 · 缓存 · 限流 · 主备容灾的工程底座",
+      "meta": "难度 ★★★★☆ · 串讲 11 个概念 · 所有 AI 应用的公共地基",
+      "readTime": "约 18 分钟",
+      "intro": "当公司里第三个团队各自直连 OpenAI/DeepSeek 时，你会遇到经典三连：API Key 满天飞没法审计、某团队一晚烧光预算、OpenAI 抽风全线业务瘫痪。LLM 网关就是把所有模型调用收口到一个统一入口：换模型改一处、成本看得见、故障自动切。它没有炫酷的算法，全是工程功夫——却是 AI 基础设施里回报率最高的一块砖。",
+      "sections": [
+        {
+          "id": "why-gateway",
+          "title": "1. 为什么必须收口：三个真实痛点",
+          "blocks": [
+            {"type": "list", "items": [
+              "痛点一·失控的成本：各团队直连模型，月底账单汇总没人说得清谁花的、花在哪。收口后：每个请求打标（团队/功能/场景），成本按维度实时可查。",
+              "痛点二·脆弱的单点：某天 OpenAI 区域性故障 4 小时，直连它的三个业务全部瘫痪。收口后：网关自动把流量切到 DeepSeek，业务无感。",
+              "痛点三·重复的轮子：每个团队都自己写重试、超时、日志——质量参差。收口后：重试/限流/日志在网关做一次，全员受益。"
+            ]},
+            {"type": "diagram", "content": " 业务A(客服)   业务B(营销)   业务C(内部工具)\n      │            │            │\n      └────────────┼────────────┘\n                   ▼\n        ┌─────────────────────┐\n        │    LLM 统一网关       │\n        │ ①鉴权+按团队限流       │\n        │ ②语义缓存(命中即返回)   │\n        │ ③模型路由(任务→模型)    │\n        │ ④熔断+主备切换          │\n        │ ⑤重试(指数退避)         │\n        │ ⑥计费埋点(团队/功能)     │\n        └──────┬───────┬───────┬─┘\n               ▼       ▼       ▼\n           OpenAI   DeepSeek   Qwen(备用)\n           (主力)    (主力备)    (降级备)\n               │       │       │\n               └───────┼───────┘\n                       ▼\n              PostgreSQL(调用日志/成本)\n              Redis(缓存/限流计数/熔断状态)"},
+            {"type": "concepts", "ids": ["model-selection", "llm-api", "project-architecture"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "request-flow",
+          "title": "2. 一次调用的完整链路（8 步）",
+          "blocks": [
+            {"type": "steps", "items": [
+              "① 鉴权与打标：业务方拿网关签发的 key（不是模型厂商的 key）调用，请求头带 team/feature 标签，后面所有计费统计靠它。",
+              "② 团队级限流：Redis 滑动窗口，每团队每分钟 QPS 上限 + 每日 token 预算，超限返回 429 并带上 Retry-After。这一步防止某个 bug 团队把全公司配额烧光。",
+              "③ 语义缓存：问题向量化后查缓存库，相似度 >0.95 直接返回（标注 X-Cache: hit）。热点问答场景命中率 30~50%，是回报最高的优化。",
+              "④ 模型路由：按请求头里的任务类型路由——classify/extract → mini 档，agent → 旗舰，reasoning → 推理模型。路由表配置化，业务方不用关心模型名。",
+              "⑤ 熔断检查：每个上游模型维护熔断器（连续 5 次失败 → 打开 30 秒）。熔断打开时该模型的请求直接走备用，不做无谓尝试。",
+              "⑥ 真实调用 + 重试：按指数退避重试（429 读 Retry-After，5xx 退避 1s/2s/4s），非幂等请求带幂等键。单次调用超时 120 秒。",
+              "⑦ 失败降级链：主力模型重试耗尽 → 备用模型 → 降级标记（响应头 X-Degraded: true，业务方可选择提示用户）→ 仍失败返回结构化错误。",
+              "⑧ 计费与审计落库：模型返回的 usage（输入/输出 token）× 单价 = 本次成本，与团队/功能标签一起写 PostgreSQL。看板每天自动汇总。"
+            ]},
+            {"type": "callout", "tone": "info", "title": "一个容易忽略的细节", "content": "网关要透传流式响应（SSE）时，重试就复杂了——已经开始往下游吐 token 的请求不能重试（用户看到了半截回答）。所以重试只对『首 token 之前』的失败生效，这个边界要在网关里显式处理。"},
+            {"type": "concepts", "ids": ["http-retry", "fault-tolerance", "redis", "logging-monitoring"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "gateway-code",
+          "title": "3. 核心代码骨架",
+          "blocks": [{"type": "code", "lang": "python", "content": "# FastAPI 网关核心路由（简化）\n@app.post('/v1/chat')\nasync def chat(req: ChatReq, team: Team = Depends(auth)):\n    if not limiter.allow(team.id, req.feature):     # ①②限流\n        raise HTTPException(429, 'rate limited')\n\n    if (hit := cache.get(req.messages)):            # ③缓存\n        return hit\n\n    model = route_table.pick(req.task,              # ④路由\n                             req.preferred_model)\n    for candidate in fallback_chain(model):         # ⑤⑦主备链\n        if breaker(candidate).open:                 # 熔断检查\n            continue\n        try:\n            resp = await with_retry(call_upstream,  # ⑥重试\n                                    candidate, req)\n            breaker(candidate).record_success()\n            break\n        except UpstreamError:\n            breaker(candidate).record_fail()\n    else:\n        return degraded_response(req)               # 全挂：降级\n\n    billing.log(team, req.feature, resp.usage,      # ⑧计费\n                candidate.name)\n    cache.put(req.messages, resp)\n    return resp\n\n# 路由表（配置化，业务方无感）\nROUTE = {\n    'classify':  'deepseek-chat',      # 轻任务：便宜快\n    'extract':   'deepseek-chat',\n    'chat':      'deepseek-chat',\n    'agent':     'gpt-4o',             # 函数调用强\n    'reasoning': 'deepseek-reasoner',  # 深度推理\n}"},
+            {"type": "callout", "tone": "tip", "title": "自建还是用开源", "content": "LiteLLM、OneAPI、Higress 等开源网关已覆盖 80% 需求，建议先用开源跑起来，业务特有逻辑（内部计费体系、审计合规）再二次开发。从零自写的理由只有一个：学习——这个项目就是最好的网络编程综合练习。"},
+            {"type": "concepts", "ids": ["fastapi", "asyncio", "pydantic"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "gateway-result",
+          "title": "4. 落地效果与踩坑",
+          "blocks": [
+            {"type": "list", "items": [
+              "成本：模型分级路由 + 语义缓存上线后，月度 token 成本降 72%，看板让每个团队的消费一目了然。",
+              "稳定性：一次 OpenAI 全球故障期间，网关 4 分钟完成自动切换，业务方零感知——事后只有计费报表上的模型名变了。",
+              "效率：新业务接入从『申请 key、写适配、做日志』三天变成『领一个网关 key』十分钟。"
+            ]},
+            {"type": "callout", "tone": "warn", "title": "踩坑记录", "content": "坑一：语义缓存对个性化回答（带用户名的问候）会串台——缓存 key 必须包含用户上下文的哈希。坑二：模型路由初期把创意写作也路由到了低温 mini 模型，文案质量投诉——路由表要带参数覆写（per-task 的 temperature）。坑三：计费初期漏算了 embedding 调用费，月账单对不上——所有模型类调用（含 embedding/rerank）都必须过网关。"},
+            {"type": "concepts", "ids": ["model-selection", "fault-tolerance", "logging-monitoring", "evaluation-metrics", "redis", "http-retry", "llm-api", "fastapi", "asyncio", "pydantic", "temperature"], "lead": "点击复习本项目全部知识点："}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-daily-agent",
+      "type": "project",
+      "title": "实战三：竞品监控日报 Agent",
+      "subtitle": "规划 · 状态持久化 · 死循环保护 · 人工审批的工程化全解",
+      "meta": "难度 ★★★★☆ · 串讲 10 个概念 · '数字员工'形态的标准样本",
+      "readTime": "约 18 分钟",
+      "intro": "老板说：『每天早上把三个竞品的动态整理成日报发我』。人肉做：每天 40 分钟；写死脚本做：竞品页面一改版就崩。这个项目用 Agent 工作流解决：LLM 负责每个环节的智能（总结 diff、写摘要），状态机负责流程的可靠（断点恢复、人工审批）。它是理解『Agent 怎么工程化』——而不是怎么炫技——的最佳样本。",
+      "sections": [
+        {
+          "id": "agent-arch",
+          "title": "1. 架构：状态机 + 大模型，各干各的擅长",
+          "blocks": [
+            {"type": "diagram", "content": "  ⏰ CRON 每天 08:00 触发\n        │\n        ▼\n  ┌─ 拉取节点 ─── 爬取 3 个竞品官网/更新日志\n  │      │  （工具: playwright + httpx，超时 30s）\n  │      ▼\n  │  diff 节点 ─── 与昨日快照对比，输出结构化变更\n  │      │  （纯代码，无需 LLM——能不用就不用）\n  │      ▼\n  │  摘要节点 ─── LLM 把变更翻译成人话\n  │      │  （温度 0.3，输出 JSON: 影响评级+摘要）\n  │      ▼\n  │  写表节点 ─── 幂等写入飞书表格（按日期 upsert）\n  │      │\n  │      ▼\n  │  ◆审批卡点 ─── 有重大变更时挂起，等人点头\n  │      │        （状态落盘，批准后从这继续）\n  │      ▼\n  └─ 通知节点 ─── 发送飞书群消息\n\n  全程每步结束 → checkpoint 落盘（可断点恢复）\n  任何步骤 → 失败重试×2 → 仍败 → 告警+跳过标记"},
+            {"type": "callout", "tone": "tip", "title": "设计哲学：LLM 用在刀刃上", "content": "整条链路只有『摘要节点』用了 LLM，其他全是确定性代码。能用 if-else 和 diff 表达的逻辑绝不用模型——便宜、稳定、可测试。LLM 的价值在于处理『爬回来的变更描述五花八门』这种非结构化输入，而不是替你写 if-else。"},
+            {"type": "concepts", "ids": ["workflow-agent", "langgraph", "working-memory"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "agent-flow",
+          "title": "2. 关键设计：让 Agent 三个月不翻车的五个机制",
+          "blocks": [
+            {"type": "steps", "items": [
+              "① 状态持久化：TaskState（goal/plan/done_steps/artifacts）每步执行完序列化落盘。真实收益：第 37 天飞书 API 抽风导致中断，修复后从断点继续，日报照常送达——没有状态的话只能全部重跑。",
+              "② 幂等设计：写表节点按『日期+竞品名』做 upsert 而不是 insert。第 12 天因为告警重跑了两次任务，表格里没有出现重复行。幂等是自动重试的前提。",
+              "③ 护栏三件套：单步超时（爬虫 30s）+ 全局步数上限（8 步，正常 6 步）+ 全局预算上限（单次运行 token ≤2 万）。第 22 天某竞品页面变成无限滚动的瀑布流，爬虫护栏触发，告警而不是无限爬。",
+              "④ 人工审批卡点：『重大变更』（LLM 影响评级=高）不自动发群，挂起等人确认。第 45 天 LLM 把一次普通的定价页改版误判成『重大』，人工把评级改回普通再放行——错误的代价从『全群骚扰』变成『点一下按钮』。",
+              "⑤ 观测与告警：每步日志（输入摘要/输出摘要/耗时/token）落库；连续两天任务失败 → 钉钉告警给维护者。Agent 最大的风险是静默失败——没人知道它已经断了。"
+            ]},
+            {"type": "code", "lang": "python", "content": "# LangGraph 状态机骨架（简化）\nclass State(TypedDict):\n    date: str\n    changes: list          # diff 结果\n    report: dict           # LLM 摘要\n    approved: bool\n    notified: bool\n\ndef fetch(state):        # 拉取节点\n    state['changes'] = crawl_competitors(state['date'])\n    return state\n\ndef summarize(state):    # 摘要节点（唯一用 LLM 的地方）\n    state['report'] = llm(\n        f'对比竞品变更并评估影响：{state[\"changes\"]}',\n        temperature=0.3)\n    return state\n\ndef wait_approval(state):  # 审批卡点：挂起等人\n    if state['report']['impact'] == 'high':\n        state['approved'] = ask_human(state['report'])\n        return state\n    state['approved'] = True\n    return state\n\ng = StateGraph(State)\ng.add_node('fetch', timed(fetch, 30))       # 护栏:超时\ng.add_node('summarize', summarize)\ng.add_node('approve', wait_approval)\ng.add_node('notify', idempotent_notify)     # 护栏:幂等\ng.set_entry_point('fetch')\ng.add_edge('fetch', 'summarize')\ng.add_edge('summarize', 'approve')\ng.add_edge('approve', 'notify')\napp = g.compile(checkpointer=saver)          # 护栏:断点恢复"},
+            {"type": "concepts", "ids": ["planning", "loop-guard", "react-loop"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "agent-retro",
+          "title": "3. 运行 90 天的复盘",
+          "blocks": [
+            {"type": "list", "items": [
+              "数字：90 天运行 88 次成功，2 次失败（竞品改版导致爬虫挂）均被护栏捕获并告警，累计拦截 7 次『重大变更』误判，节省人时约 60 小时。",
+              "成本：每天 LLM 成本约 ¥0.4（只有摘要节点用模型），三个月总成本不到一杯咖啡。",
+              "意外收获：diff 数据沉淀成结构化时间线后，销售开始拿它做竞品应对话术——原始设计的副产品比日报本身更值钱。"
+            ]},
+            {"type": "callout", "tone": "warn", "title": "如果重来一次", "content": "最大教训：第一版把『判断是否重大变更』也写成了规则（关键词匹配），漏报率高达 40%——该用 LLM 的地方不要抠。正确的分工是：确定性的事（爬取、diff、写表）用代码，需要理解力的事（评估影响、写人话）用 LLM，需要责任的事（对外发布）留给人。"},
+            {"type": "concepts", "ids": ["workflow-agent", "working-memory", "loop-guard", "logging-monitoring", "fault-tolerance", "llm-api", "http-retry", "tool-use", "langgraph", "planning"], "lead": "点击复习本项目全部知识点："}
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-content-crew",
+      "type": "project",
+      "title": "实战四：多 Agent 内容创作流水线",
+      "subtitle": "调研 → 写作 → 事实核查 → 修订的角色分工实战",
+      "meta": "难度 ★★★☆☆ · 串讲 9 个概念 · 理解多 Agent 协作的代价与收益",
+      "readTime": "约 15 分钟",
+      "intro": "这是四个项目里最『AI 味』的一个：四个 Agent 组成编辑部，自动生产每周 AI 行业周报。它存在的意义除了省时间，更是理解多 Agent 协作的活教材——什么时候值得上多 Agent、消息怎么传、钱怎么算、错误怎么打回。做完这个项目你会对『要不要上多 Agent』有自己的判断。",
+      "sections": [
+        {
+          "id": "crew-topology",
+          "title": "1. 编辑部拓扑：一条带打回环的流水线",
+          "blocks": [
+            {"type": "diagram", "content": "  📋 任务：本周 AI 行业周报\n        │\n        ▼\n  ┌──────────┐   JSON素材包    ┌──────────┐\n  │ 调研 Agent │ ────────────▶ │ 写作 Agent │\n  │ 职责:搜集   │               │ 职责:成稿   │\n  │ 工具:搜索   │               │ 工具:无     │\n  └──────────┘               └────┬─────┘\n                                  │ 初稿\n                                  ▼\n  ┌──────────┐   审稿意见JSON  ┌──────────┐\n  │ 修订 Agent │ ◀──────────── │ 核查 Agent │\n  │ 职责:按意见 │    ┌─ 通过 ── ─│ 职责:挑错   │\n  │ 改稿       │    │           │ 工具:搜索   │\n  └────┬─────┘    │打回(≤2次)  └──────────┘\n       │          └──────────────┘\n       ▼ 通过\n  📤 发布 + 归档到长期记忆(风格库)\n\n  全程消息均为结构化 JSON，禁止自由文本传话"},
+            {"type": "concepts", "ids": ["multi-agent", "crewai"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "crew-design",
+          "title": "2. 三个关键设计决策",
+          "blocks": [
+            {"type": "steps", "items": [
+              "① 消息结构化：调研 Agent 的产出不是一段话，而是 JSON：{news: [{title, source, url, key_facts}], week_range}。核查 Agent 的意见也是 JSON：{pass: bool, issues: [{type: '事实错误'|'来源缺失'|'过时', location, detail}]}。结构化的好处：下游可以程序化校验，打回意见可以逐条跟踪是否修复。",
+              "② 打回有上限：核查不通过最多打回 2 次，第三次带意见直接发布并标注『未经完全核查』。真实教训：无上限打回时两个 Agent 陷入完美主义拉锯，一篇稿子改了 11 轮、烧了 80 倍成本，质量提升却测不出来。",
+              "③ 记忆复用：发布的每篇周报归档进向量库；调研 Agent 每周开工前检索『过去 4 周写过什么』，避免重复选题。第 5 周开始，重复选题率从 30% 降到 5%。"
+            ]},
+            {"type": "code", "lang": "python", "content": "# CrewAI 四人编辑部（简化）\nresearcher = Agent(\n    role='行业调研员',\n    goal='搜集本周 Top5 AI 新闻并核实来源',\n    backstory='十年科技媒体经验，坚持每条新闻必须有可点击的原始出处',\n    tools=[web_search], verbose=True)\n\nwriter = Agent(\n    role='专栏作者',\n    goal='把素材写成深入浅出的周报',\n    backstory='擅长把技术讲给产品经理听，痛恨堆砌术语')\n\nfact_checker = Agent(\n    role='事实核查员',\n    goal='逐条验证稿件中的事实、数字、来源',\n    backstory='以挑错为乐，宁可错杀不可放过',\n    tools=[web_search])\n\nt1 = Task(description='搜集本周Top5 AI新闻', agent=researcher,\n          expected_output='JSON素材包: {news: [...] }')\nt2 = Task(description='基于素材写800字周报', agent=writer,\n          expected_output='Markdown周报', context=[t1])\nt3 = Task(description='逐条核查事实并输出审稿意见', agent=fact_checker,\n          expected_output='JSON: {pass, issues: [...]}', context=[t2])\nt4 = Task(description='按意见修订，无法修复的删除该句', agent=writer,\n          expected_output='最终版Markdown', context=[t2, t3])\n\nCrew(agents=[researcher, writer, fact_checker],\n     tasks=[t1, t2, t3, t4],\n     process=Process.sequential).kickoff()"},
+            {"type": "concepts", "ids": ["prompt-engineering", "json-schema-tools", "long-term-memory"], "lead": "本节关联概念："}
+          ]
+        },
+        {
+          "id": "crew-retro",
+          "title": "3. 一本多 Agent 的经济账（什么时候值得上）",
+          "blocks": [
+            {"type": "table", "head": ["方案", "单篇成本", "端到端延迟", "事实错误率", "维护复杂度"], "rows": [
+              ["单 Agent 一把梭（直接生成周报）", "¥0.3", "2 分钟", "11%（编造来源为主）", "★"],
+              ["单 Agent + 自我批评", "¥0.7", "4 分钟", "4%", "★★"],
+              ["四 Agent 流水线（本项目）", "¥1.6", "9 分钟", "1.5%", "★★★★"]
+            ]},
+            {"type": "text", "content": "结论读法：多 Agent 的错误率优势真实存在（1.5% vs 4%），但代价是 2.3 倍成本和 4 倍维护复杂度。它值得上的场景：产出直接对外发布、错误代价高（我们后来把核查 Agent 复用到了客户案例校对）；不值得的场景：内部草稿、头脑风暴。一句话决策：先用单 Agent + 自我批评跑到瓶颈，再考虑拆多 Agent。"},
+            {"type": "callout", "tone": "tip", "title": "本项目最值的副产品", "content": "核查 Agent 的 prompt（检查清单：数字对不对/来源可点开吗/是否过时/有没有编造术语）后来被复制到全团队所有产出型任务。多 Agent 实验真正的产出往往不是流水线本身，而是沉淀下来的角色 prompt 资产。"},
+            {"type": "concepts", "ids": ["multi-agent", "self-critique", "reflexion", "long-term-memory", "crewai", "autogen", "prompt-engineering", "evaluation-metrics", "planning"], "lead": "点击复习本项目全部知识点："}
+          ]
+        }
+      ]
+    }
+  ]
+}
