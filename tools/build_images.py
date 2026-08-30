@@ -94,10 +94,14 @@ CATEGORY_THEME = {
 
 
 def load_key():
-    for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
-        if line.strip().startswith("ZHIPU_API_KEY="):
-            return line.split("=", 1)[1].strip()
-    sys.exit("未找到 ZHIPU_API_KEY")
+    key = os.environ.get("ZHIPU_API_KEY")  # 优先环境变量，便于迁移机器
+    if key:
+        return key.strip()
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("ZHIPU_API_KEY="):
+                return line.split("=", 1)[1].strip()
+    sys.exit("未找到 ZHIPU_API_KEY（设置环境变量或 D:/project/mcp-servers/zhipu-vision/.env）")
 
 
 def slugify(name, idx):
