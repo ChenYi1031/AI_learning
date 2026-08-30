@@ -28,7 +28,7 @@
     .catch(function (e) {
       grid.innerHTML =
         '<div class="empty"><div class="empty-icon">⚠️</div><p>concepts.json 加载失败：' +
-        e.message +
+        escapeHtml(e.message) +
         '</p><p class="empty-hint">本地预览请运行 <code>python -m http.server</code> 后访问 localhost:8000</p></div>';
     });
 
@@ -67,12 +67,13 @@
   function visibleConcepts() {
     var kw = keyword.trim().toLowerCase();
     return concepts.filter(function (c) {
+      var haystack = [
+        c.name, c.description, c.category,
+        c.analogy || "",
+        (c.points || []).join(" "),
+      ].join(" ");
       var okCat = activeCategory === "全部" || c.category === activeCategory;
-      var okKw =
-        !kw ||
-        (c.name + " " + c.description + " " + c.category)
-          .toLowerCase()
-          .indexOf(kw) !== -1;
+      var okKw = !kw || haystack.toLowerCase().indexOf(kw) !== -1;
       return okCat && okKw;
     });
   }
@@ -91,6 +92,8 @@
       card.setAttribute("role", "button");
       card.setAttribute("aria-label", c.name);
 
+      var wrap = document.createElement("div");
+      wrap.className = "card-img-wrap";
       var img = document.createElement("img");
       img.loading = "lazy";
       img.alt = c.name + " 示意图";
@@ -98,9 +101,6 @@
       img.addEventListener("error", function () {
         img.src = PLACEHOLDER;
       });
-
-      var wrap = document.createElement("div");
-      wrap.className = "card-img-wrap";
       wrap.appendChild(img);
 
       var body = document.createElement("div");
@@ -108,11 +108,22 @@
       var title = document.createElement("h3");
       title.className = "card-title";
       title.textContent = c.name;
+      var desc = document.createElement("p");
+      desc.className = "card-desc";
+      desc.textContent = c.description;
+      var meta = document.createElement("div");
+      meta.className = "card-meta";
       var tag = document.createElement("span");
       tag.className = "tag";
       tag.textContent = c.category;
+      var learn = document.createElement("span");
+      learn.className = "learn-hint";
+      learn.textContent = "学习 →";
+      meta.appendChild(tag);
+      meta.appendChild(learn);
       body.appendChild(title);
-      body.appendChild(tag);
+      body.appendChild(desc);
+      body.appendChild(meta);
 
       card.appendChild(wrap);
       card.appendChild(body);
@@ -145,10 +156,77 @@
     };
     document.getElementById("modalTag").textContent = c.category;
     document.getElementById("modalTitle").textContent = c.name;
-    document.getElementById("modalDesc").textContent = c.description;
+
+    var body = document.getElementById("modalBody");
+    body.innerHTML = "";
+
+    body.appendChild(section("📄", "是什么", para(c.description)));
+
+    if (c.analogy) {
+      var analogyBox = document.createElement("div");
+      analogyBox.className = "analogy-box";
+      analogyBox.appendChild(para(c.analogy));
+      body.appendChild(section("💡", "打个比方", analogyBox));
+    }
+
+    if (c.points && c.points.length) {
+      var ul = document.createElement("ul");
+      ul.className = "points-list";
+      c.points.forEach(function (p) {
+        var li = document.createElement("li");
+        li.textContent = p;
+        ul.appendChild(li);
+      });
+      body.appendChild(section("📌", "核心要点", ul));
+    }
+
+    if (c.example && (c.example.code || c.example.scenario)) {
+      var ex = c.example;
+      var box = document.createElement("div");
+      box.className = "example-box";
+      if (ex.scenario) {
+        var sc = document.createElement("p");
+        sc.className = "scenario";
+        sc.textContent = ex.scenario;
+        box.appendChild(sc);
+      }
+      if (ex.code) {
+        var pre = document.createElement("pre");
+        pre.className = "code-block";
+        var code = document.createElement("code");
+        code.textContent = ex.code;
+        pre.appendChild(code);
+        if (ex.lang) {
+          var lang = document.createElement("span");
+          lang.className = "lang-badge";
+          lang.textContent = ex.lang;
+          pre.appendChild(lang);
+        }
+        box.appendChild(pre);
+      }
+      body.appendChild(section("💻", "实例", box));
+    }
+
     backdrop.hidden = false;
     document.body.style.overflow = "hidden";
     document.getElementById("modalClose").focus();
+  }
+
+  function section(icon_, title, contentEl) {
+    var sec = document.createElement("section");
+    sec.className = "modal-section";
+    var h3 = document.createElement("h3");
+    h3.className = "section-title";
+    h3.textContent = icon_ + " " + title;
+    sec.appendChild(h3);
+    sec.appendChild(contentEl);
+    return sec;
+  }
+
+  function para(text) {
+    var p = document.createElement("p");
+    p.textContent = text;
+    return p;
   }
 
   function closeModal() {
