@@ -1,0 +1,316 @@
+[
+  {
+    "id": "transformer",
+    "summary": "用自注意力替代循环结构的神经网络架构，是当今所有主流大模型的底座。",
+    "background": "2017 年 Google 团队在论文《Attention Is All You Need》中提出，最初只为解决机器翻译。此前主流是 RNN/LSTM，它们必须逐词顺序处理、无法并行，且长距离依赖容易丢失。Transformer 用注意力一步建模任意距离的词关系，并让整个序列并行计算，直接开启了后来的 GPT 时代。",
+    "problem": "解决 RNN 的两大死穴：训练无法并行（GPU 算力用不上）和长句前面信息传到后面就衰减。没有 Transformer，就没有今天万亿参数的模型。",
+    "applications": [
+      "所有主流大模型的骨架：GPT、DeepSeek、Qwen、Claude 全是 Transformer 变体",
+      "BERT 类模型做文本理解：搜索排序、垃圾识别、意图分类",
+      "视觉领域 ViT：把图片切块当'词'输入，图像分类和多模态的基础"
+    ],
+    "pitfalls": [
+      "以为 Transformer '理解'语言——它本质是统计模式匹配，语义是训练数据分布的体现",
+      "忽视位置编码的作用：注意力本身对顺序无感，没有位置信息'猫追狗'和'狗追猫'无法区分"
+    ],
+    "related": ["self-attention", "encoder-decoder", "context-window"],
+    "extended": "进阶方向：FlashAttention（省显存的注意力实现）、MoE（稀疏专家混合）、长上下文位置编码（RoPE/ALiBi）"
+  },
+  {
+    "id": "self-attention",
+    "summary": "每个词同时'看'句中所有词并按相关性加权融合信息的机制，公式 softmax(QKᵀ/√d)V。",
+    "background": "注意力思想最早出现在机器翻译的对齐机制中（2014 Bahdanau 注意力），2017 年 Transformer 把它推到极致：干脆不要循环，只留注意力。多头设计（Multi-Head）则源于一个观察——词与词之间有多种关系（语法关系、指代关系、语义关系），一组 QKV 学不全，就并行学八组。",
+    "problem": "解决'一个词的含义取决于上下文'这个根本问题：'苹果发布手机'和'苹果很甜'中的'苹果'需要不同表示。RNN 传递上下文像接力，距离远了就丢；自注意力让任意两词直接相连，一步到位。",
+    "applications": [
+      "大模型推理时决定'下一个词该参考哪些上文'的核心计算",
+      "机器翻译的对齐：翻译'它'时自动关注源句中对应的名词",
+      " protein 结构预测（AlphaFold2）、图像（ViT）、语音都用同一机制"
+    ],
+    "pitfalls": [
+      "以为注意力权重可以直接当'解释'用——权重高不等于因果解释，可解释性研究对此仍有争议",
+      "忽略计算复杂度是 O(n²)：序列翻倍，计算量翻四倍，这是长文本贵的根本原因"
+    ],
+    "related": ["transformer", "context-window", "token"],
+    "extended": "进阶方向：FlashAttention、KV Cache（推理加速的核心）、GQA/MQA（多头注意力的省显存变体）"
+  },
+  {
+    "id": "encoder-decoder",
+    "summary": "Transformer 的三种形态：只理解（Encoder-only）、只生成（Decoder-only）、先理解再生成（Encoder-Decoder）。",
+    "background": "2017 年原版 Transformer 是 Encoder-Decoder 结构，为翻译设计：编码器读源语言，解码器写目标语言。2018 年分化出两条路线：BERT 只留编码器做理解，GPT 只留解码器做生成。2020 年后 GPT 路线大获全胜——所有任务都可以统一表述成'预测下一个词'，Decoder-only 成为大模型默认形态。",
+    "problem": "解决'不同任务需要不同模型能力'的选型问题：理解类任务需要看到全局（双向），生成类任务必须只能看左边（单向因果），一套架构吃不下所有任务，于是分化出三种形态。",
+    "applications": [
+      "Encoder-only（BERT/bge）：搜索引擎排序、句向量（RAG 检索）、文本分类",
+      "Decoder-only（GPT/DeepSeek）：对话、写作、代码生成、Agent 大脑",
+      "Encoder-Decoder（T5/BART）：翻译、摘要——输入输出差异大的改写任务"
+    ],
+    "pitfalls": [
+      "在生成任务上用 BERT——它没有因果掩码，不是为逐词生成设计的",
+      "以为 Decoder-only 只能从左到右所以'不如双向理解'——规模化之后单向模型的理解能力反超",
+      "混淆'因果掩码'和'普通掩码'：前者是训练时防止偷看未来答案，不是处理缺失值"
+    ],
+    "related": ["transformer", "embedding-model", "token"],
+    "extended": "进阶方向：BART/T5 的跨度退化（span corruption）、PrefixLM、统一自回归范式的 in-context learning"
+  },
+  {
+    "id": "token",
+    "summary": "模型眼中的最小文字单元——模型不认识'字'和'词'，只认识 token。",
+    "background": "早期 NLP 用词或字符作单位：按词分，词表爆炸且生僻词处理不了；按字符分，序列太长学不动。2016 年前后 BPE（字节对编码）从机器翻译领域胜出，成为折中方案：高频词完整保留、低频词拆成子词。GPT 系列沿用并扩展为 byte-level BPE，任何字符串（包括 emoji 和生僻 Unicode）都能编码。",
+    "problem": "解决'开放词汇表'问题：语言里的词无穷无尽（新词、错别字、代码、emoji），不可能全放进词表。token 化让模型用固定大小的词表（几万到十几万）表示任意文本。",
+    "applications": [
+      "API 计费：OpenAI/DeepSeek 按百万 token 计价，成本估算全靠数 token",
+      "上下文长度控制：128K 窗口指的是 12.8 万 token，不是 12.8 万字",
+      "模型行为调试：模型数不清'Strawberry 有几个 r'，根源是 token 切分"
+    ],
+    "pitfalls": [
+      "以为 1 token = 1 个汉字——中文平均 1 字≈1~2 token，中英混排要实际数",
+      "忽视 token 对成本的影响：把 10 万字文档整份塞进 prompt，一次调用可能烧掉几十元",
+      "以为模型'看到'的是文字——模型只见 token ID 序列，拼写类任务弱与此直接相关"
+    ],
+    "related": ["tokenizer", "context-window", "prompt-engineering"],
+    "extended": "进阶方向：tiktoken/transformers 计数工具、词表大小与多语言能力的权衡、token 截断策略"
+  },
+  {
+    "id": "tokenizer",
+    "summary": "把文本切成 token 并转成数字 ID 的转换器，是文本进入模型的第一站。",
+    "background": "BPE 最初是 1994 年提出的压缩算法，2016 年 Sennrich 把它引入 NLP 后成为分词主流：从字符级词表出发，反复合并语料中最常见的相邻片段。Google 后来推出 SentencePiece，把空格也当普通字符处理，使日语中文等无空格语言和英文统一处理。各家模型的词表不通用，这是模型间不兼容的细节之一。",
+    "problem": "解决'文本→数字'的标准化问题：神经网络只接受数字输入，切分方案直接决定同样一句话占多少 token、模型见到的片段是否稳定。切得好，长词一个 token 搞定；切得差，碎片化导致效果和成本双输。",
+    "applications": [
+      "训练前预处理：语料全量 tokenize 后存盘，训练时直接读 ID",
+      "推理服务入口：用户请求先过 tokenizer 再进模型，返回时再解码回来",
+      "成本与长度预算：应用层在发请求前用 tokenizer 精确计数、动态截断"
+    ],
+    "pitfalls": [
+      "混用不同模型的 tokenizer 估算成本——Qwen 和 GPT 的切分差异可达 30%",
+      "以为 tokenizer 结果稳定不变——同一模型不同版本可能调整词表",
+      "对代码/数字不敏感：'1234567'可能被切成多个 token，这是模型算术容易错的源头之一"
+    ],
+    "related": ["token", "model-selection", "llm-api"],
+    "extended": "进阶方向：byte-level BPE vs WordPiece vs Unigram、中文词表优化、tokenizer-free 方向（如 ByT5）"
+  },
+  {
+    "id": "embedding",
+    "summary": "把文字变成稠密向量，让'语义相近'变成'几何距离相近'，是机器理解语义的数学基础。",
+    "background": "2013 年 Word2Vec 开创词向量时代（king - man + woman ≈ queen 的经典结果）；2018 年 BERT 把静态词向量升级为依赖上下文的动态向量；2019 年后句子/段落级 embedding 模型（如 Sentence-BERT）成熟，直接催生了向量检索和现代 RAG。今天 embedding 已经是从搜索到推荐到 RAG 的通用语义底座。",
+    "problem": "解决'计算机无法直接比较文字含义'的问题：字符串相似（编辑距离）不等于语义相似（'怎么退货'和'退款流程'几乎没有共同字）。只有把语义投影到向量空间，才能用数学方法大规模检索和比较。",
+    "applications": [
+      "语义搜索/RAG：知识库文档向量化后按距离检索，是 RAG 的地基",
+      "推荐系统：用户行为和物品都向量化，算距离做'猜你喜欢'",
+      "聚类与去重：把相似问句聚成一类，客服 FAQ 自动归并",
+      "异常检测：新文本离所有历史向量都远 → 可能是新话题或垃圾信息"
+    ],
+    "pitfalls": [
+      "拿 embedding 当'事实正确性'用——向量相似表示'话题相近'，不是'真值相等'",
+      "入库和查询用了不同模型/版本——两套坐标系下的距离毫无意义",
+      "向量维度越高越好是误解——维度高意味着存储和计算翻倍，质量取决于训练数据和目标"
+    ],
+    "related": ["embedding-model", "cosine-similarity", "vector-database"],
+    "extended": "进阶方向：对比学习训练原理、Matryoshka（套娃）维度裁剪、多模态 embedding（图文同空间）"
+  },
+  {
+    "id": "cosine-similarity",
+    "summary": "比较两个向量方向的指标（-1 到 1），RAG 检索里'谁最相关'的裁判。",
+    "background": "余弦相似度来自经典几何，NLP 早期用于文档向量比较（TF-IDF 时代）。embedding 时代它成为默认度量，原因是 embedding 模型训练时通常用余弦相似度作为优化目标——模型学到的空间结构天然适配余弦度量。业界也常用内积（点积）替代：向量归一化后两者等价，且点积计算更快。",
+    "problem": "解决'相似度不能被向量长度干扰'的问题：长文本的向量模长天然偏大，如果用欧氏距离，'长而相关'反而排到'短而精确'后面。余弦只看方向（角度），把长度因素彻底剥离。",
+    "applications": [
+      "RAG 检索排序：用户问题向量与全部文档向量算余弦，取 Top-k",
+      "相似问题去重：客服系统识别'同一件事的 100 种问法'",
+      "人脸/图像比对：FaceNet 时代起就是人脸识别的核心度量",
+      "推荐去重：判断两件商品描述是否语义重复"
+    ],
+    "pitfalls": [
+      "数据没归一化就用点积——结果被模长污染，和余弦结果差很远",
+      "认为 0.8 的相似度'很高'——不同 embedding 模型的分数分布天差地别，阈值必须用自己的数据校准",
+      "负值当作'相反语义'过度解读——多数 embedding 模型的分数实际落在 0~1，负值意义有限"
+    ],
+    "related": ["embedding", "vector-database", "ann"],
+    "extended": "进阶方向：欧氏/内积/余弦三者的适用场景、归一化技巧、针对重排的 Cross-Encoder 为何不用余弦"
+  },
+  {
+    "id": "temperature",
+    "summary": "控制模型输出随机性的旋钮：调低稳定复现，调高发散有创意。",
+    "background": "temperature 源自统计物理的玻尔兹曼分布，深度学习借用了这个概念来'加热或冷却'softmax 分布。早期语言模型（n-gram 时代）就有类似调节。如今它是所有 LLM API 的标准参数，也是'同一个问题为什么每次回答不一样'的直接答案。",
+    "problem": "解决'不同任务需要不同确定性'的矛盾：数据抽取要求两次运行结果一致（要确定性），写营销文案要求每次都有新意（要随机性）。一个参数让同一模型适配两类需求，不用换模型。",
+    "applications": [
+      "结构化抽取/分类/代码生成：temperature=0~0.3，保证稳定可测试",
+      "创意写作/起名/头脑风暴：temperature=0.7~1.0，激发多样性",
+      "调试与评测：温度设 0 减少变量，方便定位问题",
+      "Agent 场景：主控决策用低温防抖，创意工具调用内可局部调高"
+    ],
+    "pitfalls": [
+      "以为 temperature=0 就完全可复现——分布式推理、批处理调度仍会带来微小差异",
+      "用高温度解决'回答质量差'——温度只管随机性不管正确性，质量差应该改 prompt 或换模型",
+      "temperature 和 top_p 同时大幅调整——两个旋钮叠加容易失控，官方建议只调一个"
+    ],
+    "related": ["top-p", "top-k", "model-selection"],
+    "extended": "进阶方向：采样参数对 Agent 稳定性的影响、min_p 采样、beam search 与采样的区别"
+  },
+  {
+    "id": "top-p",
+    "summary": "核采样：只在累计概率前 p 的候选里随机选，动态平衡多样与靠谱。",
+    "background": "2019 年论文《The Curious Case of Neural Text Degeneration》发现：纯随机采样会陷入重复循环（文本退化），而只取最高概率又太死板。该文提出 nucleus sampling（核采样），按'概率质量'而非'固定个数'截断候选集，迅速成为各家 API 的默认配置之一。",
+    "problem": "解决 top-k 的'一刀切'缺陷：当模型很有把握时（前 2 个词占 95%），top-k=50 会把 48 个垃圾候选拉进来；当模型很迷茫时（50 个词都差不多），top-k=5 又砍掉了合理选项。top-p 按累计概率动态划定范围，两种局面都应对得当。",
+    "applications": [
+      "对话与写作类产品的默认采样配置（常与 temperature=0.7 搭配）",
+      "需要'有变化但不离谱'的生成：营销文案变体、剧情分支生成",
+      "模型评测：固定 top_p 后只调节 temperature，变量更可控"
+    ],
+    "pitfalls": [
+      "把 top_p 设成 0.1 还同时调高 temperature——两个参数互相打架，行为难预测",
+      "以为 top_p 是'取前 p 个'——p 是累计概率不是个数，0.9 不是'前 90 名'",
+      "忽视与默认值的组合：很多 API 默认 top_p=1（不截断），改它之前先确认默认行为"
+    ],
+    "related": ["temperature", "top-k", "llm-api"],
+    "extended": "进阶方向：nucleus sampling 原论文、min_p 采样（按相对概率截断）、对比 top-k/top-p/min-p 的实测差异"
+  },
+  {
+    "id": "top-k",
+    "summary": "最简单的采样截断：只在概率前 k 名里选，其余直接出局。",
+    "background": "top-k 出现早于 top-p，是神经网络语言模型时代（RNN/LSTM）控制生成质量的标准手段。它的问题随 top-p 论文对'文本退化'的深入分析而暴露：固定个数的截断无法适应分布的尖锐或平坦变化。如今主流 API 已较少暴露 top_k（OpenAI 甚至不提供），但开源推理框架（vLLM、llama.cpp）仍广泛支持。",
+    "problem": "解决'低概率垃圾词污染输出'的问题：不加截断时，概率长尾里的大量废词偶尔被采中，造成语无伦次。top-k 把长尾直接切掉，输出至少是'模型认为最靠谱的几个方向'之一。",
+    "applications": [
+      "本地推理框架（llama.cpp/vLLM）的默认采样参数之一",
+      "k=1 即贪心解码：翻译、代码补全等要绝对稳定的场景",
+      "教学与实验：理解采样机制的最简模型，常与 top-p 对照学习"
+    ],
+    "pitfalls": [
+      "k 设太大（如 100）形同虚设，设太小（如 2）输出呆板重复",
+      "在分布平坦的创意任务里用小 k——候选多样性被人为压扁",
+      "以为 top_k 和 top_p 需要同时精细调——实践上一个就够，另一个保持默认"
+    ],
+    "related": ["top-p", "temperature", "llm-api"],
+    "extended": "进阶方向：贪心解码 vs 采样在机器翻译中的表现差异、diversity 促使的 group beam search"
+  },
+  {
+    "id": "prompt-engineering",
+    "summary": "用精心设计的提示词把模型能力'调'出来，是成本最低、见效最快的 LLM 优化手段。",
+    "background": "2020 年 GPT-3 论文展示了 few-shot prompting 的惊人效果，'提示词'从工程细节升级为核心技术。2022 年思维链论文后，prompting 进入方法论化时代：角色、格式约束、few-shot、CoT 成为标准工具箱。随着模型变强，prompt 工程的重心从' tricks 堆砌'转向'清晰的需求表达和结构化约束'。",
+    "problem": "解决'模型能力很强但输出不符合要求'的问题：模型不会读心，你不说清楚格式、范围、标准，它就按训练数据的'平均水平'回答。prompt 工程把模糊需求变成精确指令，让同一模型在不同任务里表现出'专家水准'。",
+    "applications": [
+      "客服机器人：角色设定 + 知识库约束 + 兜底话术，减少幻觉",
+      "结构化抽取：要求输出严格 JSON，直接喂给下游程序",
+      "代码生成：给出语言版本、框架、编码规范，产出可直接用的代码",
+      "Agent 系统提示：定义角色、工具使用规则、循环终止条件"
+    ],
+    "pitfalls": [
+      "prompt 堆砌成千字'咒语'——指令越多模型越容易丢重点，结构清晰比长度重要",
+      "只改 prompt 不建评测集——无法判断'新 prompt 是真好还是错觉'，改进变成玄学",
+      "负面清单写一堆'不要xxx'——正向描述'要什么'通常更有效"
+    ],
+    "related": ["chain-of-thought", "hallucination", "llm-api"],
+    "extended": "进阶方向：OpenAI/Anthropic 官方 prompt 指南、结构化输出（JSON Schema/Function Calling）、prompt 版本管理与 A/B 测试"
+  },
+  {
+    "id": "chain-of-thought",
+    "summary": "让模型先写出推理步骤再给答案，中间步骤本身就是'思考'，显著提升复杂任务准确率。",
+    "background": "2022 年 Google 论文《Chain-of-Thought Prompting》发现：在 few-shot 示例里包含推理过程，模型解数学题的正确率大幅提升；同年后续工作证明哪怕只加一句'Let's think step by step'（Zero-shot CoT）也有效。2024 年 o1、DeepSeek-R1 等推理模型把 CoT 内化进训练过程，模型自动'深呼吸'再作答。",
+    "problem": "解决'模型急于给答案、跳步导致错误'的问题：让模型先输出中间步骤，等于强制它分配更多计算（生成更多 token）在推理上，每一步都有检查点，一步算错能被发现而不是一路错到底。",
+    "applications": [
+      "数学应用题、逻辑推理、多步计算类问答",
+      "复杂决策分析：先列事实、再列选项、再权衡，最后结论",
+      "SQL 生成：先描述表结构和思路，再写查询，减少语法错误",
+      "教育场景：模型输出解题过程本身就是学生要的学习材料"
+    ],
+    "pitfalls": [
+      "简单问题也加 CoT——浪费 token、增加延迟，效果毫无提升甚至画蛇添足",
+      "要求'先给答案再解释'——顺序反了没有思维链效果，必须先推理后结论",
+      "在普通对话模型上堆 CoT prompt 而不知道推理模型已内置——该直接用 o1/R1 类模型"
+    ],
+    "related": ["prompt-engineering", "react-pattern", "model-selection"],
+    "extended": "进阶方向：Self-Consistency（多次采样投票）、Tree-of-Thoughts、推理模型的'思考预算'控制"
+  },
+  {
+    "id": "react-pattern",
+    "summary": "Reasoning + Acting：让模型交替'想一步、做一步、看结果'，是 Agent 工作的经典范式。",
+    "background": "2022 年论文《ReAct: Synergizing Reasoning and Acting in Language Models》提出。此前两条路线各有短板：纯推理（CoT）只会想不会做，可能编造事实；纯行动（直接调工具）缺乏规划，容易乱调。ReAct 把两者串成 Thought→Action→Observation 循环，成为 LangChain 等框架 Agent 的默认模式。",
+    "problem": "解决'需要外部信息/操作的任务无法靠纯生成完成'的问题：'今天适合穿什么'必须先查天气——模型需要一种结构化方式来'决定查什么、拿到结果后怎么想'，而不是把天气瞎编出来。",
+    "applications": [
+      "客服 Agent：思考该查哪个系统 → 调订单 API → 根据结果回答或转人工",
+      "数据分析助手：思考需要什么数据 → 写 SQL 执行 → 解读结果 → 补充分析",
+      "个人助理：拆解'帮我订机票'为查航班、比价、下单的连续行动",
+      "搜索问答：先搜索 → 阅读结果 → 补充搜索 → 汇总回答"
+    ],
+    "pitfalls": [
+      "让模型自己生成 Observation——观察必须来自真实工具执行，否则就是高级幻觉",
+      "不加步数上限——模型陷入无限'再查一次'，烧钱又不出结果",
+      "工具返回结果不裁剪直接塞回上下文——几轮就把窗口撑爆"
+    ],
+    "related": ["react-loop", "function-calling", "agent"],
+    "extended": "进阶方向：ReAct 原论文、Plan-and-Execute 与 ReAct 的取舍、Reflexion（在 ReAct 上加反思）"
+  },
+  {
+    "id": "hallucination",
+    "summary": "模型一本正经地编造事实的现象——理解它、缓解它是 LLM 应用可信度的生命线。",
+    "background": "幻觉现象从统计语言模型时代就存在（'fluency over factuality'），LLM 时代被放大：模型太流畅，编的内容以假乱真。2023 年起成为学术和工业界焦点：评测基准（TruthfulQA）、缓解技术（RAG、引用约束）、推理模型通过强化学习降低幻觉。根本认知：模型是概率文本生成器，不是数据库，'不知道'从来不在它的默认选项里。",
+    "problem": "解决（缓解）'模型输出与事实不符'的问题：训练数据有错、知识过时、用户问题冷门、采样随机性，任何一环都可能触发编造。幻觉是 LLM 进企业生产环境（医疗、法律、金融）的最大阻力，几乎所有可靠性工程都围绕它展开。",
+    "applications": [
+      "企业知识库问答：用 RAG + 引用约束把幻觉率压到可接受范围",
+      "医疗/法律咨询产品：强制'检索不到就承认不知道' + 人工审核兜底",
+      "新闻/内容生成平台：事实核查环节 + 来源标注要求",
+      "代码助手：生成的 API 用法需要 lint/测试验证，防止编造不存在的函数"
+    ],
+    "pitfalls": [
+      "以为换更强的模型就没有幻觉——GPT-4 级模型照样流畅地编造，只是概率低一些",
+      "用'让模型自我检查'作为唯一防线——模型检查自己的幻觉，常常把幻觉再确认一遍",
+      "把 RAG 当万能药——检索到错误/过时资料时，模型会忠实地基于错误资料产生幻觉"
+    ],
+    "related": ["rag", "rag-evaluation", "prompt-engineering"],
+    "extended": "进阶方向：幻觉分类（事实性/忠实性）、RAGAS 忠实度指标、引用生成（attribution）技术"
+  },
+  {
+    "id": "context-window",
+    "summary": "模型的'工作内存'上限：系统提示+历史+资料+输出全部共享这个 token 预算。",
+    "background": "早期 Transformer 受 O(n²) 注意力限制，窗口只有 512~2048 token。技术演进一路扩容：位置编码改进（RoPE、ALiBi）、注意力稀疏化、长文本训练策略，把主流模型推到 128K，Claude/Gemini 达到 200K~1M。'大海捞针'（needle in a haystack）测试成为衡量长窗口实际可用性的标准评测。",
+    "problem": "解决'长文档、长对话超出模型处理能力'的问题：没有大窗口，模型只能看片段；窗口扩容后整本书、整个代码库可以一次性处理。但窗口 ≠ 注意力：中间内容利用率低（lost in the middle）的问题仍在，需要工程手段弥补。",
+    "applications": [
+      "长文档问答：整份合同/论文直接丢进去总结、审阅",
+      "代码助手：整个仓库上下文一次性理解，跨文件重构",
+      "长对话产品：窗口内自由多轮，超出部分靠摘要压缩续命",
+      "RAG 上下文组装：在窗口预算内决定塞几个检索结果"
+    ],
+    "pitfalls": [
+      "以为 128K 窗口 = 12.8 万汉字——中文 1 字约 1~2 token，实际能装的字更少",
+      "把窗口塞满再用——输出需要预留空间，且超长输入的中间内容容易被忽略",
+      "长对话只做截断不做摘要——关键信息（用户偏好、已达成的结论）随裁剪丢失"
+    ],
+    "related": ["short-term-memory", "token", "context-compression"],
+    "extended": "进阶方向：RoPE/ALiBi 位置编码、KV Cache 显存计算、大海捞针评测、RAG 与长上下文的取舍"
+  },
+  {
+    "id": "function-calling",
+    "summary": "让模型输出结构化的'函数调用请求'，是 LLM 从会说话到会办事的关键一步。",
+    "background": "2023 年 6 月 OpenAI 正式发布 Function Calling，迅速成为行业标准（各家 API 兼容同名概念）。它把此前'让模型输出 JSON 再祈祷格式正确'的脆弱做法，变成模型原生能力：模型在训练中专门学过'什么时候该调函数、参数怎么填'。后续发展为并行调用多个工具、强制调用指定工具等进阶能力。",
+    "problem": "解决'LLM 只能生成文本、无法安全可靠地操作现实系统'的问题：自由文本输出解析脆弱（格式一变就崩），而 function calling 用 schema 约束输出，把'决定权'留给模型、把'执行权'留在代码里，边界清晰、安全可控。",
+    "applications": [
+      "智能客服：查订单、改地址、发起退款，全部走结构化工具调用",
+      "数据分析：模型生成 SQL 调用请求，系统执行后回传结果解读",
+      "办公自动化：读写日历、发邮件、建文档，跨系统操作的中枢",
+      "Agent 框架的工具层：LangChain Tool、MCP 的底层都是 function calling"
+    ],
+    "pitfalls": [
+      "以为模型会执行函数——它只输出'调用意图'，执行永远在你的代码里",
+      "工具 schema 随手写——description 含糊导致模型乱传参，是调用准确率低的第一原因",
+      "工具执行失败直接抛异常——错误信息也应该回传给模型，让它调整策略重试"
+    ],
+    "related": ["json-schema-tools", "react-loop", "mcp"],
+    "extended": "进阶方向：parallel tool calls、strict mode（强制 schema 合法）、instructor 库的结构化输出封装"
+  },
+  {
+    "id": "model-selection",
+    "summary": "按任务难度、成本、延迟、合规选对模型——80% 的调用其实不需要最贵的模型。",
+    "background": "2023 年前'一个 GPT-4 打天下'；随着模型供给爆发（OpenAI/Anthropic/DeepSeek/Qwen/GLM...），价格差拉到 50 倍以上，模型路由（model routing）成为工程学科。趋势是'分层调用'：轻任务小模型、复杂任务旗舰、推理任务推理模型，配合缓存与批处理进一步压缩成本。",
+    "problem": "解决'性能与成本不可兼得'的问题：全用旗舰模型，账单爆炸；全用便宜模型，复杂任务翻车。选型 + 分级路由让每一分钱花在刀刃上——分类、抽取这类任务，小模型和旗舰的准确率差距往往不到 2%，成本却差 20 倍。",
+    "applications": [
+      "客服系统分级：意图分类用 mini 档，标准问答用主力档，投诉升级用旗舰档",
+      "批处理任务（数据清洗、打标签）用便宜模型 + 批处理折扣价",
+      "数据合规要求私有化：金融/政务选可私有部署的开源模型（Qwen/DeepSeek）",
+      "Agent 主控选函数调用能力强的模型，而不是综合榜单最高的"
+    ],
+    "pitfalls": [
+      "只看通用榜单选型——MMLU 高分不等于你的客服场景好用，必须用自己的评测集",
+      "换模型只换模型名——不同模型的 tokenizer、默认参数、风格都不同，prompt 需要重调",
+      "忽视隐形成本——便宜模型准确率低导致返工和人工审核，总成本反而更高"
+    ],
+    "related": ["llm-api", "prompt-engineering", "evaluation-metrics"],
+    "extended": "进阶方向：模型路由框架（RouteLLM）、成本/效果帕累托曲线、模型评测集建设方法"
+  }
+]

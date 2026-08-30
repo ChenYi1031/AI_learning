@@ -1,0 +1,382 @@
+[
+  {
+    "id": "langchain",
+    "summary": "LLM 应用开发的'乐高积木箱'：模型、检索、工具、链全部预制好，拼装即应用。",
+    "background": "2022 年 10 月 Harrison Chase 开源 LangChain，恰逢 ChatGPT 引爆前夜，靠'LLM 应用脚手架'定位病毒式增长，成为 GitHub 增长最快的项目之一。它定义了 Model I/O、Retrieval、Agents、Memory 等影响整个行业的抽象词汇。争议也一直存在：抽象层过多、版本迭代剧烈、'胶水层'被新模型能力（原生结构化输出）部分取代。2024 年团队重心转向 LangGraph。",
+    "problem": "解决'每个 LLM 应用都从零造轮子'的问题：调模型、管理 prompt 模板、接向量库、写 Agent 循环、做流式输出——这些通用件没必要每家重写。LangChain 把它们标准化，让开发者专注业务差异部分，且换模型供应商时改动极小。",
+    "applications": [
+      "标准 RAG 问答：文档加载→分块→入库→检索→生成的全链路组件开箱即用",
+      "快速原型：周末验证一个 AI 应用想法，LCEL 十几行串起来",
+      "企业内部工具：接 OpenAI/DeepSeek/本地模型统一封装，底层自由切换",
+      "学习框架：它的抽象词汇（Chain/Retriever/Tool）已成为行业通用语"
+    ],
+    "pitfalls": [
+      "把 LangChain 当黑盒硬调——抽象层出的 bug 要读源码才能定位，简单场景直接用官方 SDK 更稳",
+      "版本升级不看变更日志——0.1→0.2→0.3 大改过包结构和导入路径，生产环境锁版本",
+      "所有场景都套框架——一个 OpenAI 调用 + 一个 JSON 解析就能干的活，引入框架反而添乱"
+    ],
+    "related": ["lcel", "langgraph", "rag"],
+    "extended": "进阶方向：LCEL 深入、LangSmith 可观测平台、与 LlamaIndex 的分工对比"
+  },
+  {
+    "id": "langgraph",
+    "summary": "用状态图（节点+边）编排 Agent 工作流：支持循环、分支、人工介入、断点恢复。",
+    "background": "2024 年 1 月 LangChain 团队推出 LangGraph，直击裸 Agent 循环的三大痛：控制流不可控、状态无法持久化、人工介入没接口。灵感来自 Pregel/分布式图计算和状态机思想。2024-2025 年随着生产级 Agent 需求爆发（审批流、长任务、多 Agent），LangGraph 成为编排层事实标准之一，OpenAI 也推出类似定位的 Agents SDK。",
+    "problem": "解决'线性 Chain 表达不了真实业务流程'的问题：真实工作流有条件分支（复杂问题走深度检索）、有循环（重试、多轮）、有审批（敏感操作等人确认）、有中断恢复（任务跑一半服务重启）。这些用 if-else 包 Chain 会写成面条，状态图把控制流变成一等公民。",
+    "applications": [
+      "带审批的自动化：Agent 到敏感节点挂起等人工批准，批准后从断点继续",
+      "客服工单系统：分类→分流→处理→质检→升级的完整状态机",
+      "多 Agent 协作：Manager-Supervisor 模式下多专家节点的调度与状态共享",
+      "长时任务：深度研究 Agent 跑 30 分钟，checkpoint 让它可恢复可观测"
+    ],
+    "pitfalls": [
+      "把简单顺序流程也画成图——两个节点的活用 StateGraph 是杀鸡用牛刀，Chain/函数更直白",
+      "State 定义随意膨胀——所有节点共享一个大 dict，字段互相踩，状态结构要按职责设计",
+      "忽视 checkpoint 的存储成本——每个超步都持久化，大状态对象要精简或外置到数据库"
+    ],
+    "related": ["agent", "react-loop", "working-memory"],
+    "extended": "进阶方向：LangGraph checkpoint/时间旅行调试、Supervisor 模式、与 Temporal 类工作流引擎的对比"
+  },
+  {
+    "id": "lcel",
+    "summary": "LangChain 的管道语法：prompt | llm | parser 一行串链，免费获得流式/并发/异步。",
+    "background": "LCEL 随 LangChain 0.1（2023 年底）推出，理念是'声明式组合'：组件实现统一的 Runnable 接口，管道符只声明数据流向，运行时能力（batch/stream/ainvoke/重试）由框架统一注入。它受 Unix 管道和函数式组合思想影响，让'并发批处理 100 个请求'从手写线程池变成一次 .batch() 调用。",
+    "problem": "解决'组合逻辑与运行能力耦合'的问题：手写代码里加流式输出、加并发、加异步，每一样都要重构函数签名。LCEL 里组件只管'输入→输出'，运行时能力自动齐备——业务代码和执行策略解耦。",
+    "applications": [
+      "RAG 链组装：检索、模板填充、生成、解析四件套管道化",
+      "批量数据处理：给 500 条客户评语打标签，.batch() 并发跑完",
+      "流式对话服务：.stream() 逐 token 推给前端，打字机效果零额外代码",
+      "并行分支：RunnableParallel 同时算'答案'和'引用来源'再合并"
+    ],
+    "pitfalls": [
+      "管道嵌套太深难以调试——链里套链再套并行，出错时定位困难，用 .get_graph().print_ascii() 看结构",
+      "在 RunnableLambda 里写阻塞调用——拖垮异步整条链，IO 操作要用异步版本",
+      "以为 LCEL 链自动有重试——重试要显式加 .with_retry()，默认没有"
+    ],
+    "related": ["langchain", "asyncio", "llm-api"],
+    "extended": "进阶方向：Runnable 协议全族（with_retry/with_fallbacks/with_config）、链的可视化与追踪"
+  },
+  {
+    "id": "llamaindex",
+    "summary": "数据接入与检索专家：连接器最多、RAG 默认配置最精，管'喂给模型什么'。",
+    "background": "2022 年底 Jerry Liu 发起（原名 GPT Index），最初专注'给 GPT 接私有数据'的索引方案。当 LangChain 走'什么都做'的大而全路线时，LlamaIndex 深耕数据层：100+ 数据连接器、精细的索引结构（向量/树/关键词/知识图谱）、开箱即用的 QueryEngine。2023 年后成为 RAG 数据管道的代名词，与企业级方案（LlamaCloud）双线并行。",
+    "problem": "解决'RAG 数据管道繁琐'的问题：接数据源、清洗、分块、索引、检索、融合——每个环节自己写要一周。LlamaIndex 把默认配置调到'开箱效果良好'，15 行代码跑通高质量 RAG，把调优精力留给业务特有的部分。",
+    "applications": [
+      "快速搭建知识库问答：读 PDF 目录→建索引→QueryEngine 提问，一个下午上线",
+      "多数据源整合：Notion + 数据库 + PDF + 网页统一索引检索",
+      "企业级 RAG 平台（LlamaCloud）：托管解析、索引、检索",
+      "复杂索引结构：知识图谱索引回答'A 和 B 什么关系'类关联问题"
+    ],
+    "pitfalls": [
+      "和 LangChain 二选一的思维——两者可混用：LlamaIndex 管数据检索层，LangChain/LangGraph 管编排层",
+      "默认参数直接上生产——默认分块和 top_k 对原型友好，生产要按自己的评测集调",
+      "把 LlamaIndex 当 Agent 框架用——它的主场是数据索引检索，复杂编排仍推荐 LangGraph"
+    ],
+    "related": ["rag", "langchain", "chunking"],
+    "extended": "进阶方向：LlamaIndex 索引类型全景、LlamaParse 文档解析、模块化组件与 LangChain 互操作"
+  },
+  {
+    "id": "autogen",
+    "summary": "微软的多 Agent 群聊框架：Agent 们在对话中协作，代码可被真实执行验证。",
+    "background": "2023 年微软研究院开源 AutoGen，核心创新是'以对话为编排'：没有硬编码流程，多 Agent 通过群聊自然协作，LLM 决定下一个发言人。它的另一个杀手锏是 UserProxyAgent 能真实执行代码并回贴结果，形成'写代码→跑代码→修 bug'的自动闭环。2024 年升级为 AutoGen 0.4（事件驱动架构重写），生态地位稳固。",
+    "problem": "解决'任务无法预先画成流程图'的开放性协作问题：'写个爬虫'的步骤因网站而异，没法写成固定 Chain。让写手、执行者、审查者在对话中见招拆招，人类只需要发第一条消息和收最后的结果。",
+    "applications": [
+      "自动化编程：Coder 写代码、UserProxy 执行运行、报错自动回传修复",
+      "研究辩论：正反两个研究 Agent 独立调研后互相质证，产出更平衡的结论",
+      "数据科学流水线：数据工程师 Agent 和分析师 Agent 对话着完成清洗+分析",
+      "教学模拟：多角色（面试官/候选人）对话模拟，用于评测与训练"
+    ],
+    "pitfalls": [
+      "群聊 Agent 数量失控——每加一个 Agent token 翻倍，3-4 个是实用上限",
+      "auto 发言模式聊飞——话题发散收不回来，要设最大轮数和明确的终止条件",
+      "放任 UserProxy 执行任意代码——必须在沙箱/容器里执行，且限制网络和文件系统权限"
+    ],
+    "related": ["multi-agent", "crewai", "loop-guard"],
+    "extended": "进阶方向：AutoGen 0.4 新架构、GroupChat 发言策略、代码执行沙箱方案（Docker/Jupyter）"
+  },
+  {
+    "id": "crewai",
+    "summary": "角色驱动的 Agent 团队框架：role/goal/backstory 三件套写好，团队就能开工。",
+    "background": "2023 年底 João Moura 创建 CrewAI，踩中 AutoGen（太自由难控）和 LangChain Agent（抽象太重）之间的空档：用'剧组'隐喻提供结构化但轻量的多 Agent 编排。role/goal/backstory 的角色三件套设计直观易上手，2024 年增速迅猛，成为内容生产、研究类流水线的热门选择。",
+    "problem": "解决'多 Agent 协作缺少清晰分工语言'的问题：谁负责什么、产出给谁、什么标准算完成——CrewAI 用 Agent（角色）、Task（任务+验收标准+上下文依赖）、Process（顺序/层级模式）三个概念把分工写明白，流程确定可读，比自由群聊好维护。",
+    "applications": [
+      "内容工厂：调研→写作→审核→SEO 优化的周报/文章流水线",
+      "尽职调查：多分析师分别查财务/法务/市场，汇总成报告",
+      "旅行规划：交通、住宿、行程三个专家 Agent 协作出攻略",
+      "简历筛选流水线：解析→技能匹配→分级→生成面试提纲"
+    ],
+    "pitfalls": [
+      "backstory 写成一句废话——'你是专家'不如'你有十年财报分析经验，习惯先看现金流'，人设细节决定角色发挥",
+      "任务上下文依赖设错——B 任务需要 A 的产出但没声明 context，拿到的是空输入",
+      "hierarchical 模式无脑用——Manager 自动分派很酷但 token 消耗大，流程确定时 sequential 更稳"
+    ],
+    "related": ["multi-agent", "autogen", "planning"],
+    "extended": "进阶方向：CrewAI Flow（事件化工作流）、角色 prompt 设计模式、与 LangGraph Supervisor 的对比"
+  },
+  {
+    "id": "mcp",
+    "summary": "AI 应用的 USB-C：工具方实现一次 MCP Server，所有 AI 客户端即插即用。",
+    "background": "2024 年 11 月 Anthropic 开源 MCP（Model Context Protocol），回应'M×N 集成地狱'：M 个 AI 应用 × N 个工具，没有标准时要做 M×N 次对接。MCP 把它变成 M+N：工具方写一次 Server，所有支持协议的客户端通用。发布后迅速被 OpenAI、Google 等跟进支持，从 Anthropic 私有协议升格为行业事实标准，生态里已有数千个社区 Server。",
+    "problem": "解决'每个 AI 应用都要重复对接每个工具'的问题：数据库、GitHub、飞书、内部 API……每个客户端各写一遍适配，工具方也要维护 N 套 SDK。MCP 用标准协议（JSON-RPC）统一'发现工具、描述参数、调用执行'的接口，像 USB 统一了充电口。",
+    "applications": [
+      "开发工具集成：Claude Desktop/Cursor/ZCode 通过 MCP 操作本地文件、跑命令、查 git",
+      "企业内部工具统一接入：CRM/工单/知识库包装成 MCP Server，全公司 AI 助手共用",
+      "个人效率：天气、日历、智能家居设备的统一 AI 控制入口",
+      "数据平台：让任意 AI 客户端安全查询数仓（带鉴权和权限过滤）"
+    ],
+    "pitfalls": [
+      "把 MCP 当成只有 Claude 能用——协议是开放的，任何客户端实现协议即可接入",
+      "MCP Server 不做鉴权就暴露敏感工具——第三方 Server 可能被恶意构造，敏感操作要加确认和权限控制",
+      "stdio 模式用于远程场景——本地进程用 stdio，远程服务要用 Streamable HTTP 传输"
+    ],
+    "related": ["function-calling", "tool-use", "json-schema-tools"],
+    "extended": "进阶方向：MCP 协议规范（tools/resources/prompts 三原语）、写一个自己的 Server、MCP 安全最佳实践"
+  },
+  {
+    "id": "dify-coze",
+    "summary": "低代码 LLM 应用工厂：拖拽工作流 + 内置知识库 + 一键发布，半天上线一个 Bot。",
+    "background": "Dify 2023 年开源（原 SOMA 团队），定位'LLMOps 平台'，私有化部署能力击中企业合规需求，GitHub 星标增长迅猛；Coze（扣子）是字节 2024 年推出的商业化平台，与抖音/飞书生态深度集成。两者代表'应用工厂'路线：把 LLM 应用的通用部分（编排、知识库、发布、监控）平台化，让非工程师也能构建 AI 应用。",
+    "problem": "解决'AI 应用开发门槛高、迭代慢'的问题：业务部门想做个 FAQ 机器人，走研发排期要几周。低代码平台上传文档、拖几个节点、配置 prompt，半天发布——想法验证的速度提升一个数量级。",
+    "applications": [
+      "企业内部知识库问答：HR/IT/制度文档上传即建Bot，飞书/钉钉直接用",
+      "营销文案流水线：多节点工作流（选题→初稿→审核→多平台适配）",
+      "客户支持 Bot：接知识库 + 转人工规则 + 对话数据回流分析",
+      "原型验证：先在平台搭出效果说服老板，再决定是否工程化自研"
+    ],
+    "pitfalls": [
+      "平台边界踩坑——复杂状态管理、特殊协议对接、深度定制最终都要写代码，平台擅长的是标准应用",
+      "私有数据随手传云端 Coze——合规敏感数据选开源 Dify 私有化部署",
+      "工作流节点堆成意大利面——节点过多难维护，复杂逻辑拆子流程或导出代码框架"
+    ],
+    "related": ["rag", "langchain", "mcp"],
+    "extended": "进阶方向：Dify 工作流编排实操、平台 vs 自研的决策框架、LLMOps（版本/评测/监控）体系"
+  },
+  {
+    "id": "llm-api",
+    "summary": "和大模型对话的标准插座：OpenAI 格式一统江湖，换模型只需换 base_url。",
+    "background": "2021 年 OpenAI Codex API 开启模型即服务，2023 年 3 月 Chat Completions 接口定型成为事实标准。DeepSeek、Qwen（DashScope 兼容模式）、Kimi、GLM 纷纷实现兼容格式，'OpenAI 兼容'成了行业入场券。这复制了数据库行业 PostgreSQL 兼容协议的历史：接口标准化，实现自由竞争。",
+    "problem": "解决'每家模型一个接入方式'的碎片化问题：如果每家 API 格式不同，换模型=重写接入层。统一格式后，客户端代码写一次，模型供应商随便换——议价能力、容灾备份、A/B 测试全部变得容易。",
+    "applications": [
+      "模型供应商自由切换：生产用 DeepSeek，故障切 Qwen，代码零改动",
+      "网关层建设：统一计费、限流、日志、模型路由（LiteLLM/OneAPI 类项目）",
+      "本地开源模型服务：vLLM/Ollama 暴露 OpenAI 兼容接口，应用无感上云/下云",
+      "流式应用：SSE 逐 token 推送，聊天界面的打字机效果"
+    ],
+    "pitfalls": [
+      "以为'兼容'等于 100% 一致——各家对参数支持度不同（有的不支持 logit_bias），关键参数要逐家验证",
+      "忽视 max_tokens 和 stop 的细节差异——截断行为不同导致输出莫名截半",
+      "API Key 硬编码进代码/前端——密钥泄漏等于把信用卡挂网上，用环境变量和网关代理"
+    ],
+    "related": ["model-selection", "http-retry", "logging-monitoring"],
+    "extended": "进阶方向：SSE 流式协议细节、Responses API（OpenAI 新接口）、模型网关（LiteLLM）部署"
+  },
+  {
+    "id": "python-basics",
+    "summary": "AI 开发的通用语言：类型提示、装饰器、生成器这'三板斧'是 LLM 工程的地基。",
+    "background": "Python 从科研时代就是 ML 的事实语言（NumPy/PyTorch 生态），LLM 时代延续统治：LangChain/LlamaIndex/vLLM 全是 Python 优先。语言本身也在进化：3.5 引入 async/await、3.6 类型提示、3.10 结构模式匹配——'写 Python 像写伪代码'的同时保住了工程化能力。2023 年后 uv 等新一代工具把依赖管理速度提升十倍以上。",
+    "problem": "解决'AI 时代需要胶水语言'的问题：模型调用、数据处理、API 服务、脚本自动化，工程师需要一门'样样都行、上手极快、生态最全'的语言。Python 的类型提示体系还让'动态语言的灵活'与'静态检查的安全'兼得。",
+    "applications": [
+      "LLM 应用全套：调用 API、RAG 管道、Agent、数据处理脚本",
+      "FastAPI 服务：把模型能力包装成 HTTP 接口给业务调用",
+      "数据工程：pandas 清洗语料、构建评测集、分析调用日志",
+      "自动化脚本：批量跑实验、定时任务、运维工具"
+    ],
+    "pitfalls": [
+      "不用虚拟环境全局装包——项目间依赖冲突（torch 版本地狱），venv/uv 是第一步",
+      "类型提示只写一半——FastAPI/Pydantic 靠完整类型工作，混用 any 会让自动校验失效",
+      "忽略 GIL 的存在——多线程跑 CPU 密集任务毫无加速，CPU 并行用多进程，IO 并行用 asyncio"
+    ],
+    "related": ["fastapi", "pydantic", "asyncio"],
+    "extended": "进阶方向：uv 包管理、dataclass/protocol、Python 性能剖析（cProfile）"
+  },
+  {
+    "id": "fastapi",
+    "summary": "LLM 应用的对外服务门面：类型即校验、文档自动生成、异步原生支持。",
+    "background": "2018 年 Sebastián Ramírez 发布 FastAPI，综合了 Flask 的简洁和 Starlette 的异步性能，并靠 Pydantic 类型校验+自动文档两大杀手锏快速增长。LLM 时代它成为标配：模型服务天然是'IO 等待为主'（等 LLM 返回），FastAPI 的 async 模型完美匹配，SSE 流式响应支持也让它成为聊天后端首选。",
+    "problem": "解决'把 Python 函数变成生产级 API 很麻烦'的问题：参数校验、错误响应、接口文档、并发处理，Flask 时代要拼一堆插件。FastAPI 用类型提示一次声明全部自动搞定，前后端联调效率翻倍。",
+    "applications": [
+      "LLM 网关：统一封装多模型调用、计费、限流",
+      "RAG 问答服务：/ask 接口 + SSE 流式返回 + 来源引用",
+      "Webhook 接收器：飞书/钉钉/Slack 机器人的回调处理",
+      "内部工具 API：数据标注平台、评测脚本的服务化"
+    ],
+    "pitfalls": [
+      "async 路由里调用阻塞库（requests、time.sleep）——整个事件循环卡死，吞吐量归零，要用 httpx/asyncio.sleep",
+      "同步函数处理长任务——worker 被占死，重任务丢后台队列（Celery/arq）",
+      "生产环境用 --reload 模式——那是开发热重载，生产用 uvicorn/gunicorn 多 worker"
+    ],
+    "related": ["pydantic", "asyncio", "python-basics"],
+    "extended": "进阶方向：SSE/WebSocket 流式响应、依赖注入系统、中间件与后台任务"
+  },
+  {
+    "id": "pydantic",
+    "summary": "用类型声明统治数据：校验、序列化、文档三合一，LLM 结构化输出的基石。",
+    "background": "2014 年 Pydantic v1 发布，2018 年起随 FastAPI 爆红。v2（2023）用 Rust 重写核心（pydantic-core），性能提升 5-50 倍。LLM 时代它获得第二生命：instructor 等库让'模型输出→Pydantic 对象'变成一行代码，结构化输出（JSON Schema 约束）的底层就是 Pydantic 模型定义。",
+    "problem": "解决'脏数据在系统里流窜'的问题：外部输入（用户请求、模型输出、第三方 API）永远不可信。在系统边界用模型声明'数据长什么样'，不合法数据进门就被拦下并给出精确错误，而不是在三层调用之后莫名崩溃。",
+    "applications": [
+      "FastAPI 请求/响应模型：自动校验 + 自动文档",
+      "LLM 结构化输出：response_model=ExtractedInfo，模型输出直接变对象，格式错自动重试",
+      "Agent 状态定义：TaskState 模型让状态可序列化、可校验",
+      "配置管理：BaseSettings 从环境变量加载并校验配置"
+    ],
+    "pitfalls": [
+      "字段约束全靠 if 散落各处——Field(ge=0, le=100) 声明式约束才是正道",
+      "把 Pydantic 模型当 ORM 模型用——它管数据校验不管数据库映射，别混为一谈",
+      "忽略 v1/v2 的兼容差异——.dict() 改名 .model_dump()，迁移时要全文检查"
+    ],
+    "related": ["fastapi", "json-schema-tools", "function-calling"],
+    "extended": "进阶方向：instructor 库、v2 新特性（computed_field、 discriminated unions）、JSON Schema 导出"
+  },
+  {
+    "id": "asyncio",
+    "summary": "单线程并发上千个 IO 任务的协程方案——批量调 LLM 的吞吐量神器。",
+    "background": "Python asyncio 自 3.5（2015）定型，早期生态碎片化（aiohttp/httpx、各种事件循环），直到 3.10+ 趋于成熟。LLM 应用给了它真正的舞台：模型调用是典型'等 30 秒返回'的 IO 任务，串行排队是浪费，asyncio 让等待时间重叠起来。2023 年后各 LLM SDK 原生提供 AsyncClient，异步成为 LLM 工程默认姿势。",
+    "problem": "解决'IO 等待浪费'的问题：500 篇文档各调一次 LLM，串行 2 秒/次要 16 分钟；协程并发 20 路，同样 2 秒/次的耗时重叠起来只要 2 分钟。模型 API 一次只处理一个请求的限制，被并发调用天然绕开。",
+    "applications": [
+      "批量任务：评测集跑分、语料批量摘要、文档批量向量化",
+      "高并发服务：FastAPI + httpx.AsyncClient 支撑上百并发请求",
+      "多路检索并行：向量检索、BM25、重排同时发起再汇总",
+      "Agent 并行工具调用：查天气、查日历、查邮件一次并发发出"
+    ],
+    "pitfalls": [
+      "在协程里用 requests——一个阻塞调用冻结整个事件循环，全服请求排队",
+      "无限制 gather——1000 个协程同时发请求，瞬间打爆上游限流，必须加 Semaphore",
+      "忘了 await——协程对象创建了没执行，bug 静默潜伏，开启调试模式能抓"
+    ],
+    "related": ["http-retry", "fastapi", "langchain"],
+    "extended": "进阶方向：httpx 异步客户端、asyncio.gather/as_completed 差异、任务取消与超时控制"
+  },
+  {
+    "id": "http-retry",
+    "summary": "外部调用的保命三件套：超时、重试、指数退避——生产可用性的分水岭。",
+    "background": "分布式系统经典理论（幂等性、退避算法）在 LLM 时代全面回归：模型 API 的 429 限流和偶发 5xx 是日常而非异常。Google SRE 的重试黄金法则（指数退避+抖动+预算上限）成为 LLM 工程标配。2023 年起各 SDK 内置自动重试，但'什么时候不该重试'（非幂等操作）依然要工程师自己判断。",
+    "problem": "解决'外部依赖不可靠但业务必须可靠'的矛盾：不设超时，一个挂起的请求拖死整个服务；不做重试，一次网络抖动就让用户看到报错；无脑密集重试，重试风暴把半死的服务彻底打死。三件套把'不稳定'驯服成'可控'。",
+    "applications": [
+      "LLM API 调用：429 读 Retry-After 等待，5xx 指数退避重试",
+      "工具调用链：Agent 调外部 API 全部包上超时和重试装饰器",
+      "批处理管道：向量化/评测任务的单条失败隔离重跑",
+      "Webhook 投递：回调失败按 1m/5m/30m 退避补投"
+    ],
+    "pitfalls": [
+      "重试非幂等操作（下单、发消息）——网络超时时第一次可能已成功，重试造成重复下单，要加幂等键",
+      "退避不加抖动——服务恢复瞬间所有客户端同时重试，二次雪崩",
+      "超时只设总时长不区分阶段——连接超时（5s）和读超时（120s）要分开，LLM 调用读超时要放长"
+    ],
+    "related": ["asyncio", "fault-tolerance", "loop-guard"],
+    "extended": "进阶方向：tenacity 重试库、幂等键设计、熔断器模式与重试的配合"
+  },
+  {
+    "id": "postgresql",
+    "summary": "LLM 应用的默认业务数据库：数据、向量（pgvector）、全文检索一个库全包。",
+    "background": "PostgreSQL 1996 年诞生于伯克利，以'最像学术研究却最可靠的数据库'著称，三十年稳居最受欢迎开源数据库。AI 时代的两个关键节点：pgvector（2021）让它直接支持向量检索，2023 年 RAG 热潮中'别急着上专用向量库，先看 pgvector'成为理性声音；2024 年 pgvector 0.7 支持 HNSW 索引后，中小规模 RAG 的默认答案越来越收敛于 PG。",
+    "problem": "解决'AI 应用数据存储碎片化'的问题：业务数据一个库、向量一个库、全文检索一个引擎，运维三套系统。PG 用一库三能力（关系+向量+全文）解决中小规模场景，事务一致性、权限、备份全部白送。",
+    "applications": [
+      "对话记录与用户数据：所有业务实体的默认存储",
+      "中小 RAG 全家桶：pgvector 存文档向量，同库做权限过滤和审计",
+      "Agent 记忆存储：长期记忆结构化存 PG + 向量列做语义检索",
+      "调用日志分析：JSONB 存请求响应明细，SQL 直接分析 token 成本"
+    ],
+    "pitfalls": [
+      "pgvector 不建索引当普通列用——全表暴力扫描，数据过万就慢，必须建 HNSW/IVFFlat 索引",
+      "向量检索不配合元数据过滤——'只在本人权限内的文档里搜'要一条 SQL 完成，两个库反而难做",
+      "盲目上分布式/NewSQL——单机 PG 撑百万级 QPS 的读场景很常见，先测再扩"
+    ],
+    "related": ["vector-database", "sqlalchemy", "redis"],
+    "extended": "进阶方向：pgvector HNSW 调参、JSONB 索引、PG 16 逻辑复制与高可用"
+  },
+  {
+    "id": "redis",
+    "summary": "微秒级的内存数据结构服务器：缓存、限流、分布式锁三件套撑起 LLM 应用半边天。",
+    "background": "Redis 2009 年诞生（Salvatore Sanfilippo），从'缓存'进化成'数据结构服务器'（字符串/哈希/集合/流/概率结构）。LLM 时代它的三个老技能被重新定价：embedding 缓存（省钱）、滑动窗口限流（护住 API 配额）、分布式锁（防重复执行）。2024 年许可证风波后，Valkey（Linux 基金会分叉）成为开源替代，协议和使用方式一致。",
+    "problem": "解决'快和贵之间的矛盾'：LLM 调用又慢又贵，但大量请求是重复的（'退货政策是什么'每天被问 500 次）。Redis 把重复请求的答案、embedding、会话状态放在内存里，微秒级返回，LLM 调用量直降七成。",
+    "applications": [
+      "语义/精确缓存：相同问题直接回缓存答案（配合 embedding 相似度做语义缓存）",
+      "API 限流：INCR+EXPIRE 两行实现'每用户每分钟 5 次'",
+      "分布式锁：多实例部署时防止同一任务被重复执行",
+      "会话与队列：短期对话状态存取、任务队列（Stream/List）"
+    ],
+    "pitfalls": [
+      "重要数据只存 Redis 不落库——内存数据库重启/淘汰即丢，持久化配置和兜底落库要设计",
+      "缓存不设 TTL——知识库更新后旧答案永远命中，缓存失效策略要和内容更新节奏对齐",
+      "大 Key 化——把整个对话历史塞一个 String，读写阻塞，按消息粒度拆分"
+    ],
+    "related": ["postgresql", "http-retry", "logging-monitoring"],
+    "extended": "进阶方向：语义缓存（GPTCache 思路）、Redis Stream 做任务队列、缓存穿透/雪崩防护"
+  },
+  {
+    "id": "sqlalchemy",
+    "summary": "Python 的数据库翻译官：用类和对象操作表，换数据库不改业务代码。",
+    "background": "SQLAlchemy 2006 年发布，近二十年稳居 Python ORM 事实标准。2.0 版（2023）带来现代化查询语法和完整类型提示。在 AI 项目里的价值被 pgvector 热潮放大：Python 应用操作'业务表+向量表'时，SQLAlchemy + Alembic（迁移）是默认组合，向量和业务数据在同一套 ORM 里管理。",
+    "problem": "解决'SQL 散落各处难以维护'的问题：手写 SQL 字符串有注入风险、无类型检查、换数据库要全文改写。ORM 把表映射成类、查询写成链式调用，数据库方言由引擎层消化，业务代码与数据库解耦。",
+    "applications": [
+      "对话记录存储：Message 模型增删改查，会话历史持久化",
+      "评测与标注平台：评测集、标注结果、实验记录的元数据管理",
+      "向量+业务混合查询：文档表带向量列，权限过滤和相似检索一条语句",
+      "数据库迁移：Alembic 版本化管理 schema 变更，团队协作不炸库"
+    ],
+    "pitfalls": [
+      "N+1 查询问题——循环里逐条查关联对象，100 条记录发出 101 条 SQL，用 selectinload 预加载",
+      "把 ORM 当万能——复杂分析查询硬写 ORM 可读性崩溃，text() 原生 SQL 是合法逃生通道",
+      "忘了关闭 Session——连接泄漏耗尽连接池，始终用 with Session(engine) 管理生命周期"
+    ],
+    "related": ["postgresql", "pydantic", "python-basics"],
+    "extended": "进阶方向：2.0 风格查询、异步 SQLAlchemy（与 FastAPI 配合）、Alembic 迁移工作流"
+  },
+  {
+    "id": "docker",
+    "summary": "把'在我机器上能跑'变成'在哪都能跑'：应用+依赖打包成标准集装箱。",
+    "background": "Docker 2013 年发布，把 Linux 容器技术做成人人可用的工具，五年内重塑软件交付。AI 应用的容器化有特殊痛点：torch 镜像动辄 5-10GB、CUDA 驱动版本敏感、GPU 直通配置复杂。2023 年后 AI 项目标配 docker-compose：app + postgres(pgvector) + redis + 向量库一条命令拉起，新成员入职第一天就能跑全栈。",
+    "problem": "解决'环境不一致'的万恶之源：开发机 Python 3.12、服务器 3.9；本地有 ffmpeg、线上没有——'我本地是好的'成为经典甩锅语录。镜像把应用和全部依赖原子化打包，部署变成'拉镜像、跑容器'两个动作。",
+    "applications": [
+      "LLM 应用部署：FastAPI 服务 + 向量库 + 缓存的 compose 编排",
+      "本地开源模型：Ollama/vLLM 容器化运行，环境隔离不污染系统",
+      "代码执行沙箱：Agent 生成的代码扔进一次性容器里跑，安全隔离",
+      "CI/CD：构建镜像→推仓库→多环境一致性部署"
+    ],
+    "pitfalls": [
+      "镜像里塞模型权重——几个 GB 的权重让镜像不可维护，权重放卷挂载或对象存储，镜像只装逻辑",
+      "不写 .dockerignore——把 .git、venv、数据集全打进去，镜像膨胀到离谱",
+      "容器里数据不挂卷——容器删除数据即失，数据库和上传文件必须用 volume"
+    ],
+    "related": ["fastapi", "postgresql", "fault-tolerance"],
+    "extended": "进阶方向：多阶段构建瘦身、GPU 容器（nvidia-container-toolkit）、docker-compose 生产化"
+  },
+  {
+    "id": "logging-monitoring",
+    "summary": "LLM 应用的黑匣子+仪表盘：每一步可回放，成本延迟实时可见。",
+    "background": "可观测性（日志/指标/链路追踪）是云原生时代的成熟学科，LLM 应用在 2023 年遇到独特挑战：一次请求内部有'检索→重排→生成→工具调用'多段黑盒，传统 APM 看不透。于是垂直工具崛起：LangSmith（LangChain 系）、Langfuse（开源）、Phoenix 等，把每次调用的完整轨迹（trace）可视化，token 成本监控成为新仪表盘标配。",
+    "problem": "解决'AI 输出错了无从查起'的问题：用户投诉回答错误，没有轨迹日志时只能复现祈祷；有 trace 后 30 秒定位是检索没召回、重排排错序还是模型自由发挥。同时 token 成本、P95 延迟、错误率这些指标必须持续可见，否则成本失控和性能劣化都是静默发生。",
+    "applications": [
+      "Agent 轨迹追踪：每步 Thought/Action/Observation 按序记录，回放定位决策错误",
+      "成本看板：按用户/功能/模型维度统计 token 消耗，异常突增告警",
+      "质量监控：线上抽样跑忠实度/相关性评分，劣化自动报警",
+      "A/B 实验：新旧 prompt/模型分流对比，指标说话"
+    ],
+    "pitfalls": [
+      "只记最终答案不记中间过程——RAG 出错时无法区分是检索问题还是生成问题",
+      "日志不打 trace_id——微服务和多步链路无法串联，一次请求的日志散落各处",
+      "记录完整对话但不含敏感信息治理——用户隐私进日志系统要做脱敏，否则合规事故"
+    ],
+    "related": ["rag-evaluation", "http-retry", "evaluation-metrics"],
+    "extended": "进阶方向：Langfuse/LangSmith 实操、OpenTelemetry 接入 LLM SDK、成本告警策略"
+  },
+  {
+    "id": "fault-tolerance",
+    "summary": "系统出事时的应急预案：重试→熔断→降级→兜底，保住'永远有响应'。",
+    "background": "容错设计是分布式系统老学科（熔断器模式 2011 年由 Netflix Hystrix 普及），LLM 应用让它迎来第二春：模型 API 是新的'最不可靠依赖'——限流、超时、区域性故障是常态。2024 年初 OpenAI 数小时级故障让全行业见识到单点依赖的脆弱，'主备模型+降级链'从最佳实践变成生存必需。",
+    "problem": "解决'依赖挂了我也挂'的级联失败问题：重试解决瞬时抖动，熔断防止对半死依赖持续施压，降级保证核心功能可用（换备用模型/返回缓存），兜底（转人工/友好提示）守住最后底线。目标是故障时'体验降级但服务不中断'。",
+    "applications": [
+      "模型双活：主 GPT-4o 故障自动切 DeepSeek，响应头标注降级模式",
+      "熔断器：连续 5 次失败暂停调用 30 秒，期间直接走备用路径",
+      "RAG 降级链：向量库挂了退关键词检索，检索全挂返回 FAQ 缓存",
+      "Agent 工具容错：单个工具失败不炸整个任务，标记后跳过或换路"
+    ],
+    "pitfalls": [
+      "备用模型和主模型共用同一个供应商——机房级故障一起挂，主备要跨供应商",
+      "降级了不告知用户——'当前为简化回答模式'的提示是诚实，静默降级是埋雷",
+      "熔断阈值拍脑袋——太敏感频繁误熔断，太迟钝失去保护，按依赖的实际 SLA 校准"
+    ],
+    "related": ["http-retry", "loop-guard", "logging-monitoring"],
+    "extended": "进阶方向：熔断器三态机实现、跨供应商模型路由（LiteLLM Router）、混沌工程演练"
+  }
+]

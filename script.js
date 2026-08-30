@@ -68,9 +68,12 @@
     var kw = keyword.trim().toLowerCase();
     return concepts.filter(function (c) {
       var haystack = [
-        c.name, c.description, c.category,
-        c.analogy || "",
+        c.name, c.summary, c.description, c.category,
+        c.analogy || "", c.background || "", c.problem || "",
         (c.points || []).join(" "),
+        (c.pitfalls || []).join(" "),
+        (c.applications || []).join(" "),
+        c.extended || "",
       ].join(" ");
       var okCat = activeCategory === "全部" || c.category === activeCategory;
       var okKw = !kw || haystack.toLowerCase().indexOf(kw) !== -1;
@@ -110,7 +113,7 @@
       title.textContent = c.name;
       var desc = document.createElement("p");
       desc.className = "card-desc";
-      desc.textContent = c.description;
+      desc.textContent = c.summary || c.description;
       var meta = document.createElement("div");
       meta.className = "card-meta";
       var tag = document.createElement("span");
@@ -162,6 +165,17 @@
 
     body.appendChild(section("📄", "是什么", para(c.description)));
 
+    if (c.background) {
+      body.appendChild(section("🌱", "背景与动机", para(c.background)));
+    }
+
+    if (c.problem) {
+      var probBox = document.createElement("div");
+      probBox.className = "problem-box";
+      probBox.appendChild(para(c.problem));
+      body.appendChild(section("🎯", "解决什么问题", probBox));
+    }
+
     if (c.analogy) {
       var analogyBox = document.createElement("div");
       analogyBox.className = "analogy-box";
@@ -170,14 +184,15 @@
     }
 
     if (c.points && c.points.length) {
-      var ul = document.createElement("ul");
-      ul.className = "points-list";
-      c.points.forEach(function (p) {
-        var li = document.createElement("li");
-        li.textContent = p;
-        ul.appendChild(li);
-      });
-      body.appendChild(section("📌", "核心要点", ul));
+      body.appendChild(section("📌", "核心要点", bulletList(c.points, "points-list")));
+    }
+
+    if (c.pitfalls && c.pitfalls.length) {
+      body.appendChild(section("⚠️", "常见误区", bulletList(c.pitfalls, "pitfall-list")));
+    }
+
+    if (c.applications && c.applications.length) {
+      body.appendChild(section("🏢", "实际应用场景", bulletList(c.applications, "app-list")));
     }
 
     if (c.example && (c.example.code || c.example.scenario)) {
@@ -207,9 +222,51 @@
       body.appendChild(section("💻", "实例", box));
     }
 
+    if (c.extended || (c.related && c.related.length)) {
+      var nav = document.createElement("div");
+      nav.className = "extended-box";
+      if (c.extended) {
+        var ext = document.createElement("p");
+        ext.className = "extended-text";
+        ext.textContent = c.extended;
+        nav.appendChild(ext);
+      }
+      if (c.related && c.related.length) {
+        var chips = document.createElement("div");
+        chips.className = "related-chips";
+        c.related.forEach(function (rid) {
+          var target = concepts.find(function (x) {
+            return x.id === rid;
+          });
+          if (!target) return;
+          var chip = document.createElement("button");
+          chip.className = "related-chip";
+          chip.textContent = "→ " + target.name;
+          chip.addEventListener("click", function () {
+            openModal(target);
+            document.querySelector(".modal").scrollTo(0, 0);
+          });
+          chips.appendChild(chip);
+        });
+        nav.appendChild(chips);
+      }
+      body.appendChild(section("🧭", "延伸学习", nav));
+    }
+
     backdrop.hidden = false;
     document.body.style.overflow = "hidden";
     document.getElementById("modalClose").focus();
+  }
+
+  function bulletList(items, cls) {
+    var ul = document.createElement("ul");
+    ul.className = cls;
+    items.forEach(function (p) {
+      var li = document.createElement("li");
+      li.textContent = p;
+      ul.appendChild(li);
+    });
+    return ul;
   }
 
   function section(icon_, title, contentEl) {

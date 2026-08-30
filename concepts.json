@@ -3,1278 +3,2694 @@
     "id": "transformer",
     "category": "大模型基础",
     "name": "Transformer",
+    "summary": "用自注意力替代循环结构的神经网络架构，是当今所有主流大模型的底座。",
     "description": "当前主流大模型（GPT、DeepSeek、Qwen 等）的基础神经网络架构，2017 年由论文《Attention Is All You Need》提出。它完全依赖自注意力机制建模词与词之间的关系，抛弃了 RNN 的循环结构，因此可以大规模并行训练，才有了今天的大模型时代。理解 Transformer 是理解一切大模型行为的起点。",
+    "background": "2017 年 Google 团队在论文《Attention Is All You Need》中提出，最初只为解决机器翻译。此前主流是 RNN/LSTM，它们必须逐词顺序处理、无法并行，且长距离依赖容易丢失。Transformer 用注意力一步建模任意距离的词关系，并让整个序列并行计算，直接开启了后来的 GPT 时代。",
+    "problem": "解决 RNN 的两大死穴：训练无法并行（GPU 算力用不上）和长句前面信息传到后面就衰减。没有 Transformer，就没有今天万亿参数的模型。",
     "analogy": "像一间开满灯的会议室：每个人（词）都能同时看到其他所有人，并决定该重点听谁说话，而不是像 RNN 那样只能排队传话。",
     "points": [
       "核心组件：自注意力层 + 前馈网络（FFN），堆叠 N 层构成",
       "位置编码（Positional Encoding）负责告诉模型词的先后顺序",
       "可完全并行训练，这是大模型能'大力出奇迹'的工程前提"
     ],
+    "pitfalls": [
+      "以为 Transformer '理解'语言——它本质是统计模式匹配，语义是训练数据分布的体现",
+      "忽视位置编码的作用：注意力本身对顺序无感，没有位置信息'猫追狗'和'狗追猫'无法区分"
+    ],
+    "applications": [
+      "所有主流大模型的骨架：GPT、DeepSeek、Qwen、Claude 全是 Transformer 变体",
+      "BERT 类模型做文本理解：搜索排序、垃圾识别、意图分类",
+      "视觉领域 ViT：把图片切块当'词'输入，图像分类和多模态的基础"
+    ],
     "example": {
       "scenario": "把'猫追老鼠'输入 Transformer：注意力机制会让'追'同时关注'猫'（施动者）和'老鼠'（受动者），从而理解谁在追谁。",
       "code": "import torch, torch.nn as nn\n\n# Transformer 的最小骨架：一层编码器\nlayer = nn.TransformerEncoderLayer(\n    d_model=512, nhead=8, dim_feedforward=2048\n)\nx = torch.rand(10, 32, 512)        # (序列长10, 批量32, 维度512)\nout = layer(x)                     # 输出形状与输入相同\nprint(out.shape)  # torch.Size([10, 32, 512])",
       "lang": "python"
     },
+    "related": [
+      "self-attention",
+      "encoder-decoder",
+      "context-window"
+    ],
+    "extended": "进阶方向：FlashAttention（省显存的注意力实现）、MoE（稀疏专家混合）、长上下文位置编码（RoPE/ALiBi）",
     "image": "images/transformer.png"
   },
   {
     "id": "self-attention",
     "category": "大模型基础",
     "name": "自注意力机制（Self-Attention）",
+    "summary": "每个词同时'看'句中所有词并按相关性加权融合信息的机制，公式 softmax(QKᵀ/√d)V。",
     "description": "Transformer 的核心算子。每个 token 会被投影成三个向量：Query（我在找什么）、Key（我有什么特征）、Value（我的实际内容）。用 Q 和所有 K 做点积并 softmax 归一化得到注意力权重，再对所有 V 加权求和，输出就是'融合了上下文的新表示'。公式：Attention(Q,K,V)=softmax(QKᵀ/√d)V。",
+    "background": "注意力思想最早出现在机器翻译的对齐机制中（2014 Bahdanau 注意力），2017 年 Transformer 把它推到极致：干脆不要循环，只留注意力。多头设计（Multi-Head）则源于一个观察——词与词之间有多种关系（语法关系、指代关系、语义关系），一组 QKV 学不全，就并行学八组。",
+    "problem": "解决'一个词的含义取决于上下文'这个根本问题：'苹果发布手机'和'苹果很甜'中的'苹果'需要不同表示。RNN 传递上下文像接力，距离远了就丢；自注意力让任意两词直接相连，一步到位。",
     "analogy": "查字典时，你的问题（Q）和每个词条的标题（K）匹配，匹配度越高就越采纳该词条的解释（V）——而且所有词条是同时匹配的。",
     "points": [
       "除以 √d 是为了防止点积过大导致 softmax 梯度消失",
       "多头注意力（Multi-Head）= 多组 QKV 并行，各自关注不同模式",
       "计算量和序列长度的平方成正比，这是长上下文昂贵的根源"
     ],
+    "pitfalls": [
+      "以为注意力权重可以直接当'解释'用——权重高不等于因果解释，可解释性研究对此仍有争议",
+      "忽略计算复杂度是 O(n²)：序列翻倍，计算量翻四倍，这是长文本贵的根本原因"
+    ],
+    "applications": [
+      "大模型推理时决定'下一个词该参考哪些上文'的核心计算",
+      "机器翻译的对齐：翻译'它'时自动关注源句中对应的名词",
+      " protein 结构预测（AlphaFold2）、图像（ViT）、语音都用同一机制"
+    ],
     "example": {
       "scenario": "句子'苹果发布了新手机'中，'苹果'的注意力会强烈指向'发布''手机'，从而被理解为公司而非水果。",
       "code": "import numpy as np\n\ndef softmax(x):\n    e = np.exp(x - x.max(-1, keepdims=True))\n    return e / e.sum(-1, keepdims=True)\n\nd, n = 8, 3                         # 维度8, 序列长3\nQ, K, V = [np.random.rand(n, d) for _ in range(3)]\nattn = softmax(Q @ K.T / np.sqrt(d))   # (3,3) 注意力权重\nout = attn @ V                      # 加权求和\nprint(np.round(attn, 2))            # 每行和为1，直观看到'关注谁'",
       "lang": "python"
     },
+    "related": [
+      "transformer",
+      "context-window",
+      "token"
+    ],
+    "extended": "进阶方向：FlashAttention、KV Cache（推理加速的核心）、GQA/MQA（多头注意力的省显存变体）",
     "image": "images/self-attention.png"
   },
   {
     "id": "encoder-decoder",
     "category": "大模型基础",
     "name": "Encoder-Decoder / Decoder-only / Encoder-only",
+    "summary": "Transformer 的三种形态：只理解（Encoder-only）、只生成（Decoder-only）、先理解再生成（Encoder-Decoder）。",
     "description": "Transformer 的三种形态：Encoder-Decoder（先理解再生成，适合翻译、摘要）把输入编码成表示再逐词解码输出；Decoder-only（GPT 系列）只保留带因果掩码的解码器，从左到右逐 token 生成，是当前主流大模型（GPT、DeepSeek、Qwen）的形态；Encoder-only（BERT 系列）只做双向理解，适合分类、检索、句向量。",
+    "background": "2017 年原版 Transformer 是 Encoder-Decoder 结构，为翻译设计：编码器读源语言，解码器写目标语言。2018 年分化出两条路线：BERT 只留编码器做理解，GPT 只留解码器做生成。2020 年后 GPT 路线大获全胜——所有任务都可以统一表述成'预测下一个词'，Decoder-only 成为大模型默认形态。",
+    "problem": "解决'不同任务需要不同模型能力'的选型问题：理解类任务需要看到全局（双向），生成类任务必须只能看左边（单向因果），一套架构吃不下所有任务，于是分化出三种形态。",
     "analogy": "Encoder-only 像阅读理解老师（只批卷不打分），Decoder-only 像作家（看上文写下一个字），Encoder-Decoder 像翻译（先读懂原文再逐句写出译文）。",
     "points": [
       "Decoder-only 有因果掩码：每个位置只能看到它左边的 token",
       "生成类任务几乎都被 Decoder-only 统一：把任务变成'续写'",
       "Encoder-only（BERT/bge）输出的句向量广泛用于 RAG 检索"
     ],
+    "pitfalls": [
+      "在生成任务上用 BERT——它没有因果掩码，不是为逐词生成设计的",
+      "以为 Decoder-only 只能从左到右所以'不如双向理解'——规模化之后单向模型的理解能力反超",
+      "混淆'因果掩码'和'普通掩码'：前者是训练时防止偷看未来答案，不是处理缺失值"
+    ],
+    "applications": [
+      "Encoder-only（BERT/bge）：搜索引擎排序、句向量（RAG 检索）、文本分类",
+      "Decoder-only（GPT/DeepSeek）：对话、写作、代码生成、Agent 大脑",
+      "Encoder-Decoder（T5/BART）：翻译、摘要——输入输出差异大的改写任务"
+    ],
     "example": {
       "scenario": "翻译'我爱你→I love you'：Encoder-Decoder 先把中文整句压缩成语义表示，再逐词生成英文；而 GPT 的做法是把这句话当作前缀，直接续写' I love you'。",
       "code": "# 同一个任务在不同架构下的典型用法\n# Encoder-only（BERT）：理解\nfrom transformers import pipeline\nclf = pipeline('sentiment-analysis')\nclf('这家餐厅太棒了')   # -> [{'label': 'POSITIVE', ...}]\n\n# Decoder-only（GPT 类）：生成\n# 输入: '请把这句话翻译成英文：我爱你 ->'\n# 输出: ' I love you'   生成任务被统一成了续写",
       "lang": "python"
     },
+    "related": [
+      "transformer",
+      "embedding-model",
+      "token"
+    ],
+    "extended": "进阶方向：BART/T5 的跨度退化（span corruption）、PrefixLM、统一自回归范式的 in-context learning",
     "image": "images/encoder-decoder.png"
   },
   {
     "id": "token",
     "category": "大模型基础",
     "name": "Token",
+    "summary": "模型眼中的最小文字单元——模型不认识'字'和'词'，只认识 token。",
     "description": "大模型处理文本的最小单位，是词、子词或字符的编码片段。模型的输入输出、计费、上下文长度限制全部以 token 计数。英文约 1 token ≈ 0.75 个单词，中文约 1 个汉字 ≈ 1~2 个 token。理解 token 才能算清成本、控制 prompt 长度。",
+    "background": "早期 NLP 用词或字符作单位：按词分，词表爆炸且生僻词处理不了；按字符分，序列太长学不动。2016 年前后 BPE（字节对编码）从机器翻译领域胜出，成为折中方案：高频词完整保留、低频词拆成子词。GPT 系列沿用并扩展为 byte-level BPE，任何字符串（包括 emoji 和生僻 Unicode）都能编码。",
+    "problem": "解决'开放词汇表'问题：语言里的词无穷无尽（新词、错别字、代码、emoji），不可能全放进词表。token 化让模型用固定大小的词表（几万到十几万）表示任意文本。",
     "analogy": "像乐高积木的最小颗粒：文章这栋'房子'是先拆成小颗粒（tokenize）再被模型拼装理解的，颗粒大小直接影响成本和容量。",
     "points": [
       "一个 token 不等于一个词：'unbelievable' 可能被切成 3 段",
       "上下文窗口、API 计费、速率限制都以 token 为单位",
       "生成长度 = 输入 token + 输出 token，两者都占上下文窗口"
     ],
+    "pitfalls": [
+      "以为 1 token = 1 个汉字——中文平均 1 字≈1~2 token，中英混排要实际数",
+      "忽视 token 对成本的影响：把 10 万字文档整份塞进 prompt，一次调用可能烧掉几十元",
+      "以为模型'看到'的是文字——模型只见 token ID 序列，拼写类任务弱与此直接相关"
+    ],
+    "applications": [
+      "API 计费：OpenAI/DeepSeek 按百万 token 计价，成本估算全靠数 token",
+      "上下文长度控制：128K 窗口指的是 12.8 万 token，不是 12.8 万字",
+      "模型行为调试：模型数不清'Strawberry 有几个 r'，根源是 token 切分"
+    ],
     "example": {
       "scenario": "一个 128K 上下文的模型，输入 100K token 的文档后只剩 28K 可用于回答；若按百万 token 计费 1 元，一次输入 8000 token 的调用就是 0.008 元。",
       "code": "import tiktoken   # pip install tiktoken\n\nenc = tiktoken.get_encoding('cl100k_base')\ntext = '大模型按 token 计费'\ntokens = enc.encode(text)\nprint(tokens)            # token id 序列\nprint(len(tokens))       # -> 13 个 token\nprint([enc.decode([t]) for t in tokens])  # 看每个 token 是什么",
       "lang": "python"
     },
+    "related": [
+      "tokenizer",
+      "context-window",
+      "prompt-engineering"
+    ],
+    "extended": "进阶方向：tiktoken/transformers 计数工具、词表大小与多语言能力的权衡、token 截断策略",
     "image": "images/token.png"
   },
   {
     "id": "tokenizer",
     "category": "大模型基础",
     "name": "Tokenizer",
+    "summary": "把文本切成 token 并转成数字 ID 的转换器，是文本进入模型的第一站。",
     "description": "把原始文本切分成 token 并映射为数字 ID 的工具，是文本进入模型的第一站。主流算法是 BPE（Byte Pair Encoding）：从字符开始，反复合并语料中出现最频繁的相邻片段，形成词表。词表大小通常 3 万~15 万，词表越大序列越短、计算越省，但 embedding 参数越多。",
+    "background": "BPE 最初是 1994 年提出的压缩算法，2016 年 Sennrich 把它引入 NLP 后成为分词主流：从字符级词表出发，反复合并语料中最常见的相邻片段。Google 后来推出 SentencePiece，把空格也当普通字符处理，使日语中文等无空格语言和英文统一处理。各家模型的词表不通用，这是模型间不兼容的细节之一。",
+    "problem": "解决'文本→数字'的标准化问题：神经网络只接受数字输入，切分方案直接决定同样一句话占多少 token、模型见到的片段是否稳定。切得好，长词一个 token 搞定；切得差，碎片化导致效果和成本双输。",
     "analogy": "像快递分拣系统：无论你寄的是什么形状的包裹（中文、英文、代码），都要先标准化成统一规格的箱子（token ID）才能进流水线。",
     "points": [
       "BPE 高频词保持完整，低频词被拆成子词，兼顾词表大小与覆盖率",
       "不同模型词表不同：同一个词在 GPT 和 Qwen 下的 token 数不同",
       "数字、代码、生僻字容易被切得很碎，这是模型数数不准的原因之一"
     ],
+    "pitfalls": [
+      "混用不同模型的 tokenizer 估算成本——Qwen 和 GPT 的切分差异可达 30%",
+      "以为 tokenizer 结果稳定不变——同一模型不同版本可能调整词表",
+      "对代码/数字不敏感：'1234567'可能被切成多个 token，这是模型算术容易错的源头之一"
+    ],
+    "applications": [
+      "训练前预处理：语料全量 tokenize 后存盘，训练时直接读 ID",
+      "推理服务入口：用户请求先过 tokenizer 再进模型，返回时再解码回来",
+      "成本与长度预算：应用层在发请求前用 tokenizer 精确计数、动态截断"
+    ],
     "example": {
       "scenario": "'Tokenization' 用 GPT-2 的 BPE 会切成 ['Token', 'ization'] 两段；而 'unbelievable' 会切成 ['un', 'believ', 'able']——常用词留整、生僻词拆分。",
       "code": "from transformers import AutoTokenizer  # pip install transformers\n\ntok = AutoTokenizer.from_pretrained('Qwen/Qwen2.5-7B')\ntext = 'Tokenizer 把文本变成数字'\nids = tok.encode(text)\nprint(ids)                       # 数字 ID 序列\nprint(tok.convert_ids_to_tokens(ids))  # 反查每个 token 的原文片段\nprint('token 数:', len(ids))",
       "lang": "python"
     },
+    "related": [
+      "token",
+      "model-selection",
+      "llm-api"
+    ],
+    "extended": "进阶方向：byte-level BPE vs WordPiece vs Unigram、中文词表优化、tokenizer-free 方向（如 ByT5）",
     "image": "images/tokenizer.png"
   },
   {
     "id": "embedding",
     "category": "大模型基础",
     "name": "Embedding（向量嵌入）",
+    "summary": "把文字变成稠密向量，让'语义相近'变成'几何距离相近'，是机器理解语义的数学基础。",
     "description": "把 token、句子或文档映射成一个稠密向量（如 1536 维浮点数组），使语义相近的文本在向量空间中距离更近。它是语义检索、聚类、推荐和 RAG 的基石：文字变成了可计算的几何对象，'意思相近'变成了'距离相近'。",
+    "background": "2013 年 Word2Vec 开创词向量时代（king - man + woman ≈ queen 的经典结果）；2018 年 BERT 把静态词向量升级为依赖上下文的动态向量；2019 年后句子/段落级 embedding 模型（如 Sentence-BERT）成熟，直接催生了向量检索和现代 RAG。今天 embedding 已经是从搜索到推荐到 RAG 的通用语义底座。",
+    "problem": "解决'计算机无法直接比较文字含义'的问题：字符串相似（编辑距离）不等于语义相似（'怎么退货'和'退款流程'几乎没有共同字）。只有把语义投影到向量空间，才能用数学方法大规模检索和比较。",
     "analogy": "给每句话在一张巨大的语义地图上标一个坐标：'小猫'和'猫咪'的坐标几乎重合，而'小猫'和'数据库'相距十万八千里。",
     "points": [
       " embedding 模型决定向量质量，RAG 效果差先检查它",
       "同一批检索必须用同一个 embedding 模型，不可混用",
       "常见维度：OpenAI text-embedding-3-small 为 1536 维，bge-m3 为 1024 维"
     ],
+    "pitfalls": [
+      "拿 embedding 当'事实正确性'用——向量相似表示'话题相近'，不是'真值相等'",
+      "入库和查询用了不同模型/版本——两套坐标系下的距离毫无意义",
+      "向量维度越高越好是误解——维度高意味着存储和计算翻倍，质量取决于训练数据和目标"
+    ],
+    "applications": [
+      "语义搜索/RAG：知识库文档向量化后按距离检索，是 RAG 的地基",
+      "推荐系统：用户行为和物品都向量化，算距离做'猜你喜欢'",
+      "聚类与去重：把相似问句聚成一类，客服 FAQ 自动归并",
+      "异常检测：新文本离所有历史向量都远 → 可能是新话题或垃圾信息"
+    ],
     "example": {
       "scenario": "知识库里存了 1 万条 FAQ，用户问'怎么退款'，把问题转成向量后，'退货流程''钱怎么退回来'这两条 FAQ 的向量距离最近，被检索出来作为回答依据。",
       "code": "from sentence_transformers import SentenceTransformer  # pip install\n\nmodel = SentenceTransformer('BAAI/bge-small-zh-v1.5')\nvecs = model.encode(['怎么申请退款', '退货流程是什么', '今天天气真好'])\nprint(vecs.shape)          # (3, 512) 三句话各一个 512 维向量\n# '退款'和'退货'的相似度应明显高于'天气'\nfrom sklearn.metrics.pairwise import cosine_similarity\nprint(cosine_similarity(vecs[:1], vecs[1:]))   # 高相似\nprint(cosine_similarity(vecs[:1], vecs[2:]))   # 低相似",
       "lang": "python"
     },
+    "related": [
+      "embedding-model",
+      "cosine-similarity",
+      "vector-database"
+    ],
+    "extended": "进阶方向：对比学习训练原理、Matryoshka（套娃）维度裁剪、多模态 embedding（图文同空间）",
     "image": "images/embedding.png"
   },
   {
     "id": "cosine-similarity",
     "category": "大模型基础",
     "name": "余弦相似度",
+    "summary": "比较两个向量方向的指标（-1 到 1），RAG 检索里'谁最相关'的裁判。",
     "description": "衡量两个向量方向是否一致的指标，取值 [-1, 1]，越接近 1 越相似。它只看夹角不看长度，所以不受向量模长影响，是 embedding 检索的标准度量。计算公式：cos(θ) = A·B / (|A|×|B|)。",
+    "background": "余弦相似度来自经典几何，NLP 早期用于文档向量比较（TF-IDF 时代）。embedding 时代它成为默认度量，原因是 embedding 模型训练时通常用余弦相似度作为优化目标——模型学到的空间结构天然适配余弦度量。业界也常用内积（点积）替代：向量归一化后两者等价，且点积计算更快。",
+    "problem": "解决'相似度不能被向量长度干扰'的问题：长文本的向量模长天然偏大，如果用欧氏距离，'长而相关'反而排到'短而精确'后面。余弦只看方向（角度），把长度因素彻底剥离。",
     "analogy": "两个人朝同一个方向走，不管一个走得快一个走得慢（向量长度不同），只要方向相同，就认为他们'目的相似'。",
     "points": [
       "RAG 检索就是把用户问题向量和所有文档向量算余弦相似度后取 Top-k",
       "1=完全同向，0=正交（无关），-1=完全相反",
       "向量归一化（normalize）后，余弦相似度等价于点积"
     ],
+    "pitfalls": [
+      "数据没归一化就用点积——结果被模长污染，和余弦结果差很远",
+      "认为 0.8 的相似度'很高'——不同 embedding 模型的分数分布天差地别，阈值必须用自己的数据校准",
+      "负值当作'相反语义'过度解读——多数 embedding 模型的分数实际落在 0~1，负值意义有限"
+    ],
+    "applications": [
+      "RAG 检索排序：用户问题向量与全部文档向量算余弦，取 Top-k",
+      "相似问题去重：客服系统识别'同一件事的 100 种问法'",
+      "人脸/图像比对：FaceNet 时代起就是人脸识别的核心度量",
+      "推荐去重：判断两件商品描述是否语义重复"
+    ],
     "example": {
       "scenario": "向量库里有三条记录，用户问题'苹果手机多少钱'的向量与'iPhone 价格'相似度 0.92、与'苹果营养价值'0.41、与'退货政策'0.33——取 Top-1 作为检索结果。",
       "code": "import numpy as np\n\ndef cosine(a, b):\n    return a @ b / (np.linalg.norm(a) * np.linalg.norm(b))\n\nq = np.array([1, 2, 3])\ndoc1 = np.array([1.1, 2.0, 2.9])   # 方向几乎一致\nprint(cosine(q, doc1))             # -> 0.9999 极相似\n\n# 检索：对一堆文档向量批量算相似度，取最大的 k 个\ndocs = np.random.rand(1000, 3)\nsims = docs @ q / (np.linalg.norm(docs, axis=1) * np.linalg.norm(q))\ntop5 = sims.argsort()[-5:][::-1]\nprint('最相似的5个文档下标:', top5)",
       "lang": "python"
     },
+    "related": [
+      "embedding",
+      "vector-database",
+      "ann"
+    ],
+    "extended": "进阶方向：欧氏/内积/余弦三者的适用场景、归一化技巧、针对重排的 Cross-Encoder 为何不用余弦",
     "image": "images/cosine-similarity.png"
   },
   {
     "id": "temperature",
     "category": "大模型基础",
     "name": "Temperature（温度参数）",
+    "summary": "控制模型输出随机性的旋钮：调低稳定复现，调高发散有创意。",
     "description": "控制生成随机性的超参数，作用在 softmax 之前：对 logits 除以 temperature。值越低（→0）分布越尖锐，模型几乎总选概率最高的 token，输出稳定但呆板；值越高（如 1.5）分布越平坦，输出更多样但更容易跑偏。取值范围通常 0~2，默认 1。",
+    "background": "temperature 源自统计物理的玻尔兹曼分布，深度学习借用了这个概念来'加热或冷却'softmax 分布。早期语言模型（n-gram 时代）就有类似调节。如今它是所有 LLM API 的标准参数，也是'同一个问题为什么每次回答不一样'的直接答案。",
+    "problem": "解决'不同任务需要不同确定性'的矛盾：数据抽取要求两次运行结果一致（要确定性），写营销文案要求每次都有新意（要随机性）。一个参数让同一模型适配两类需求，不用换模型。",
     "analogy": "像调味的辣度：temperature=0 是白开水（永远给标准答案），temperature=1.5 是变态辣（什么都敢说，偶尔惊艳更多时候翻车）。",
     "points": [
       "抽取类任务（分类、信息提取、代码）用 0~0.3，追求稳定",
       "创意类任务（写文案、头脑风暴）用 0.7~1.0，追求多样",
       "temperature=0 不代表完全可复现，分布式推理仍有微小随机性"
     ],
+    "pitfalls": [
+      "以为 temperature=0 就完全可复现——分布式推理、批处理调度仍会带来微小差异",
+      "用高温度解决'回答质量差'——温度只管随机性不管正确性，质量差应该改 prompt 或换模型",
+      "temperature 和 top_p 同时大幅调整——两个旋钮叠加容易失控，官方建议只调一个"
+    ],
+    "applications": [
+      "结构化抽取/分类/代码生成：temperature=0~0.3，保证稳定可测试",
+      "创意写作/起名/头脑风暴：temperature=0.7~1.0，激发多样性",
+      "调试与评测：温度设 0 减少变量，方便定位问题",
+      "Agent 场景：主控决策用低温防抖，创意工具调用内可局部调高"
+    ],
     "example": {
       "scenario": "prompt='天空是'。temperature=0 时永远答'蓝色的'；temperature=1.5 时可能答'蔚蓝的''辽阔的''像大海的调色盘'，偶尔甚至答'绿色的'（写科幻小说时这叫创意，做数据提取时这叫 bug）。",
       "code": "from openai import OpenAI\nclient = OpenAI()   # 兼容 DeepSeek/Qwen 等只需换 base_url 和 key\n\ndef ask(prompt, temperature):\n    return client.chat.completions.create(\n        model='gpt-4o-mini',\n        messages=[{'role': 'user', 'content': prompt}],\n        temperature=temperature,\n    ).choices[0].message.content\n\n# 抽取任务：稳定优先\nask('从这句话提取人名：小李去找小王玩', 0)\n# 创意任务：多样优先\nask('给奶茶店起 5 个名字', 0.9)",
       "lang": "python"
     },
+    "related": [
+      "top-p",
+      "top-k",
+      "model-selection"
+    ],
+    "extended": "进阶方向：采样参数对 Agent 稳定性的影响、min_p 采样、beam search 与采样的区别",
     "image": "images/temperature.png"
   },
   {
     "id": "top-p",
     "category": "大模型基础",
     "name": "Top-p（核采样）",
+    "summary": "核采样：只在累计概率前 p 的候选里随机选，动态平衡多样与靠谱。",
     "description": "另一种控制随机性的采样策略：把候选 token 按概率从高到低排序，从累计概率刚好达到 p 的最小集合中采样。p=0.9 表示只在'最可能的前 90% 概率质量'里选，动态砍掉长尾的低概率 token。它比固定的 Top-k 更灵活：候选集中有 3 个大概率词就只看 3 个，有 50 个势均力敌的词就看 50 个。",
+    "background": "2019 年论文《The Curious Case of Neural Text Degeneration》发现：纯随机采样会陷入重复循环（文本退化），而只取最高概率又太死板。该文提出 nucleus sampling（核采样），按'概率质量'而非'固定个数'截断候选集，迅速成为各家 API 的默认配置之一。",
+    "problem": "解决 top-k 的'一刀切'缺陷：当模型很有把握时（前 2 个词占 95%），top-k=50 会把 48 个垃圾候选拉进来；当模型很迷茫时（50 个词都差不多），top-k=5 又砍掉了合理选项。top-p 按累计概率动态划定范围，两种局面都应对得当。",
     "analogy": "自助餐厅只摆累计好评率 90% 的菜：人气菜多时桌子就多摆几道，人气集中时只摆那几道招牌——按'热度质量'动态决定候选范围。",
     "points": [
       "Top-p 是动态截断，Top-k 是固定个数截断，二者通常只调一个",
       "p=0.1 近似贪心输出，p=1 等于不截断（完全按原始分布采样）",
       "实践中常用 temperature=0.7 + top_p=0.9 的组合"
     ],
+    "pitfalls": [
+      "把 top_p 设成 0.1 还同时调高 temperature——两个参数互相打架，行为难预测",
+      "以为 top_p 是'取前 p 个'——p 是累计概率不是个数，0.9 不是'前 90 名'",
+      "忽视与默认值的组合：很多 API 默认 top_p=1（不截断），改它之前先确认默认行为"
+    ],
+    "applications": [
+      "对话与写作类产品的默认采样配置（常与 temperature=0.7 搭配）",
+      "需要'有变化但不离谱'的生成：营销文案变体、剧情分支生成",
+      "模型评测：固定 top_p 后只调节 temperature，变量更可控"
+    ],
     "example": {
       "scenario": "预测'白日依山'的下一个字，概率分布：'尽'0.85、'前'0.08、'远'0.04、其他 0.03。top_p=0.9 时候选集={尽, 前}（累计 0.93 刚好超过 0.9，回退到 0.85+0.08），'远'及长尾全部出局。",
       "code": "import numpy as np\n\ndef top_p_sample(probs, p=0.9):\n    idx = np.argsort(probs)[::-1]          # 按概率降序\n    sorted_p = np.array(probs)[idx]\n    cutoff = np.searchsorted(np.cumsum(sorted_p), p) + 1\n    keep = idx[:cutoff]                    # 保留累计概率 <= p 的头部\n    keep_p = np.array(probs)[keep] / np.array(probs)[keep].sum()\n    return np.random.choice(keep, p=keep_p)\n\nprint(top_p_sample([0.85, 0.08, 0.04, 0.03], p=0.9))  # 大概率选 0 号'尽'",
       "lang": "python"
     },
+    "related": [
+      "temperature",
+      "top-k",
+      "llm-api"
+    ],
+    "extended": "进阶方向：nucleus sampling 原论文、min_p 采样（按相对概率截断）、对比 top-k/top-p/min-p 的实测差异",
     "image": "images/top-p.png"
   },
   {
     "id": "top-k",
     "category": "大模型基础",
     "name": "Top-k",
+    "summary": "最简单的采样截断：只在概率前 k 名里选，其余直接出局。",
     "description": "采样策略中最简单的一种：只在概率最高的 k 个 token 里重新归一化后采样，其余全部丢弃。k=1 退化为贪心解码（永远选最大概率），k 越大越接近原始分布。它是 Top-p 的前身，缺点是 k 固定：分布尖锐时把不该进的低概率词也拉进来，分布平坦时又把合理的候选砍掉。",
+    "background": "top-k 出现早于 top-p，是神经网络语言模型时代（RNN/LSTM）控制生成质量的标准手段。它的问题随 top-p 论文对'文本退化'的深入分析而暴露：固定个数的截断无法适应分布的尖锐或平坦变化。如今主流 API 已较少暴露 top_k（OpenAI 甚至不提供），但开源推理框架（vLLM、llama.cpp）仍广泛支持。",
+    "problem": "解决'低概率垃圾词污染输出'的问题：不加截断时，概率长尾里的大量废词偶尔被采中，造成语无伦次。top-k 把长尾直接切掉，输出至少是'模型认为最靠谱的几个方向'之一。",
     "analogy": "不管菜系是冷门还是火爆，餐厅永远只摆评价数前 5 名的菜——菜好评集中时还好，好评分散时前 5 名可能都很一般。",
     "points": [
       "k 是固定数量截断，不随分布形状变化，这是它逊于 Top-p 的原因",
       "k=1 即贪心解码，输出确定，适合代码生成等需要稳定的场景",
       "现在 API 一般同时暴露 top_k 和 top_p，只调其中一个即可"
     ],
+    "pitfalls": [
+      "k 设太大（如 100）形同虚设，设太小（如 2）输出呆板重复",
+      "在分布平坦的创意任务里用小 k——候选多样性被人为压扁",
+      "以为 top_k 和 top_p 需要同时精细调——实践上一个就够，另一个保持默认"
+    ],
+    "applications": [
+      "本地推理框架（llama.cpp/vLLM）的默认采样参数之一",
+      "k=1 即贪心解码：翻译、代码补全等要绝对稳定的场景",
+      "教学与实验：理解采样机制的最简模型，常与 top-p 对照学习"
+    ],
     "example": {
       "scenario": "概率分布：A 0.60、B 0.25、C 0.10、D 0.05。k=2 时候选={A, B}，重归一化为 A 0.706、B 0.294 再采样；C、D 即使偶尔合理也永远没有机会。",
       "code": "import numpy as np\n\ndef top_k_sample(probs, k=2):\n    probs = np.array(probs)\n    idx = np.argsort(probs)[::-1][:k]      # 只要前 k 个\n    keep_p = probs[idx] / probs[idx].sum() # 重新归一化\n    return np.random.choice(idx, p=keep_p)\n\nprobs = [0.60, 0.25, 0.10, 0.05]\nprint([top_k_sample(probs, k=2) for _ in range(10)])  #只会出现 0 和 1 号",
       "lang": "python"
     },
+    "related": [
+      "top-p",
+      "temperature",
+      "llm-api"
+    ],
+    "extended": "进阶方向：贪心解码 vs 采样在机器翻译中的表现差异、diversity 促使的 group beam search",
     "image": "images/top-k.png"
   },
   {
     "id": "prompt-engineering",
     "category": "大模型基础",
     "name": "Prompt Engineering（提示词工程）",
+    "summary": "用精心设计的提示词把模型能力'调'出来，是成本最低、见效最快的 LLM 优化手段。",
     "description": "通过设计和优化提示词来引导模型输出符合预期的结果，是大模型应用成本最低、见效最快的优化手段。核心技巧包括：角色设定（你是资深法务）、任务拆解（分步骤完成）、少样本示例（给 2-3 个输入输出样例）、输出格式约束（要求 JSON）、思维链（要求一步步推理）。同一个模型，prompt 质量不同效果可能天差地别。",
+    "background": "2020 年 GPT-3 论文展示了 few-shot prompting 的惊人效果，'提示词'从工程细节升级为核心技术。2022 年思维链论文后，prompting 进入方法论化时代：角色、格式约束、few-shot、CoT 成为标准工具箱。随着模型变强，prompt 工程的重心从' tricks 堆砌'转向'清晰的需求表达和结构化约束'。",
+    "problem": "解决'模型能力很强但输出不符合要求'的问题：模型不会读心，你不说清楚格式、范围、标准，它就按训练数据的'平均水平'回答。prompt 工程把模糊需求变成精确指令，让同一模型在不同任务里表现出'专家水准'。",
     "analogy": "给实习生布置任务：'整理个报告'（差 prompt）和'把附件里的销售数据按季度汇总成表格，突出同比变化，控制在 10 行内'（好 prompt），产出完全不同。",
     "points": [
       "基本结构：角色 + 背景 + 任务 + 约束 + 输出格式 + 示例",
       "先说'要什么'再说'不要什么'，正向描述比负面清单更有效",
       "prompt 要像代码一样版本化管理和做 A/B 对比，而非凭感觉改"
     ],
+    "pitfalls": [
+      "prompt 堆砌成千字'咒语'——指令越多模型越容易丢重点，结构清晰比长度重要",
+      "只改 prompt 不建评测集——无法判断'新 prompt 是真好还是错觉'，改进变成玄学",
+      "负面清单写一堆'不要xxx'——正向描述'要什么'通常更有效"
+    ],
+    "applications": [
+      "客服机器人：角色设定 + 知识库约束 + 兜底话术，减少幻觉",
+      "结构化抽取：要求输出严格 JSON，直接喂给下游程序",
+      "代码生成：给出语言版本、框架、编码规范，产出可直接用的代码",
+      "Agent 系统提示：定义角色、工具使用规则、循环终止条件"
+    ],
     "example": {
       "scenario": "差 prompt：'帮我分类这条评论'。好 prompt：'你是电商评论分析员。把用户评论分为【好评/中评/差评】之一，只输出 JSON {\"label\": \"...\"}。评论：物流很快但包装破了'。",
       "code": "# 同一个任务，两种写法的差距\nbad = '总结一下这篇文章'\n\ngood = '''你是一名技术编辑。\n请把下面的文章总结成：\n1. 一句话核心结论（不超过30字）\n2. 3 个要点（每条不超过20字）\n只输出 JSON：{\"summary\": \"\", \"points\": []}\n\n文章：{article}'''\n\n# 要点：角色定位 + 明确格式 + 字数约束 + 占位符模板",
       "lang": "python"
     },
+    "related": [
+      "chain-of-thought",
+      "hallucination",
+      "llm-api"
+    ],
+    "extended": "进阶方向：OpenAI/Anthropic 官方 prompt 指南、结构化输出（JSON Schema/Function Calling）、prompt 版本管理与 A/B 测试",
     "image": "images/prompt-engineering.png"
   },
   {
     "id": "chain-of-thought",
     "category": "大模型基础",
     "name": "思维链（Chain of Thought, CoT）",
+    "summary": "让模型先写出推理步骤再给答案，中间步骤本身就是'思考'，显著提升复杂任务准确率。",
     "description": "在 prompt 中要求模型'一步步推理'或给出带推理过程的示例，让模型先写出中间步骤再给最终答案。推理步骤为模型提供了更多'思考 token'，能显著提升数学、逻辑、多步分析类任务的准确率。进阶变体：Zero-shot CoT（只加'让我们一步步思考'）、Few-shot CoT（示例里带推理过程）、自洽性（多次采样投票）。",
+    "background": "2022 年 Google 论文《Chain-of-Thought Prompting》发现：在 few-shot 示例里包含推理过程，模型解数学题的正确率大幅提升；同年后续工作证明哪怕只加一句'Let's think step by step'（Zero-shot CoT）也有效。2024 年 o1、DeepSeek-R1 等推理模型把 CoT 内化进训练过程，模型自动'深呼吸'再作答。",
+    "problem": "解决'模型急于给答案、跳步导致错误'的问题：让模型先输出中间步骤，等于强制它分配更多计算（生成更多 token）在推理上，每一步都有检查点，一步算错能被发现而不是一路错到底。",
     "analogy": "做应用题不许只写答案、必须写解题过程——写过程本身就是思考，能暴露错误也能让每一步都有据可查。",
     "points": [
       "对复杂推理任务提升显著，对简单任务反而画蛇添足还费 token",
       "推理型模型（o1、DeepSeek-R1）已把 CoT 内化，无需再手动加'一步步想'",
       "让模型'先列步骤再作答'的顺序很重要，先答案后推理无效"
     ],
+    "pitfalls": [
+      "简单问题也加 CoT——浪费 token、增加延迟，效果毫无提升甚至画蛇添足",
+      "要求'先给答案再解释'——顺序反了没有思维链效果，必须先推理后结论",
+      "在普通对话模型上堆 CoT prompt 而不知道推理模型已内置——该直接用 o1/R1 类模型"
+    ],
+    "applications": [
+      "数学应用题、逻辑推理、多步计算类问答",
+      "复杂决策分析：先列事实、再列选项、再权衡，最后结论",
+      "SQL 生成：先描述表结构和思路，再写查询，减少语法错误",
+      "教育场景：模型输出解题过程本身就是学生要的学习材料"
+    ],
     "example": {
       "scenario": "问'小明有 23 个苹果，买了 3 箱每箱 12 个，送人 15 个，还剩几个？'直接问可能答错；加 CoT 后模型会先算 23+36=59，再 59-15=44，答案 44。",
       "code": "prompt_direct = '23个苹果，买3箱每箱12个，送人15个，还剩几个？直接答。'\n\nprompt_cot = '''23个苹果，买3箱每箱12个，送人15个，还剩几个？\n请按以下格式回答：\n第一步：计算...\n第二步：计算...\n最终答案：xx个'''\n\n# CoT 的关键：强制输出中间步骤，每步都有检查点",
       "lang": "python"
     },
+    "related": [
+      "prompt-engineering",
+      "react-pattern",
+      "model-selection"
+    ],
+    "extended": "进阶方向：Self-Consistency（多次采样投票）、Tree-of-Thoughts、推理模型的'思考预算'控制",
     "image": "images/chain-of-thought.png"
   },
   {
     "id": "react-pattern",
     "category": "大模型基础",
     "name": "ReAct 模式",
+    "summary": "Reasoning + Acting：让模型交替'想一步、做一步、看结果'，是 Agent 工作的经典范式。",
     "description": "ReAct = Reasoning + Acting，让模型交替进行'思考（Thought）→ 行动（Action）→ 观察结果（Observation）'来完成任务的模式，2022 年论文提出后成为 Agent 的经典工作范式。思考步骤让模型规划下一步，行动步骤调用工具（搜索、计算器、API），观察结果又触发下一轮思考，如此循环直到得出答案。它把'纯推理'和'纯行动'的优势结合起来。",
+    "background": "2022 年论文《ReAct: Synergizing Reasoning and Acting in Language Models》提出。此前两条路线各有短板：纯推理（CoT）只会想不会做，可能编造事实；纯行动（直接调工具）缺乏规划，容易乱调。ReAct 把两者串成 Thought→Action→Observation 循环，成为 LangChain 等框架 Agent 的默认模式。",
+    "problem": "解决'需要外部信息/操作的任务无法靠纯生成完成'的问题：'今天适合穿什么'必须先查天气——模型需要一种结构化方式来'决定查什么、拿到结果后怎么想'，而不是把天气瞎编出来。",
     "analogy": "做饭时的你：想一下（该放盐了）→ 动手（尝一口）→ 看结果（有点淡）→ 再想再动……思考与行动交替，而不是一次想完全程再一次性做完。",
     "points": [
       "Thought 负责规划和反思，Action 负责与外部世界交互",
       " Observation 必须来自真实工具返回，不能让模型自己编造",
       "LangChain/LangGraph 等框架的 Agent 底层就是 ReAct 范式"
     ],
+    "pitfalls": [
+      "让模型自己生成 Observation——观察必须来自真实工具执行，否则就是高级幻觉",
+      "不加步数上限——模型陷入无限'再查一次'，烧钱又不出结果",
+      "工具返回结果不裁剪直接塞回上下文——几轮就把窗口撑爆"
+    ],
+    "applications": [
+      "客服 Agent：思考该查哪个系统 → 调订单 API → 根据结果回答或转人工",
+      "数据分析助手：思考需要什么数据 → 写 SQL 执行 → 解读结果 → 补充分析",
+      "个人助理：拆解'帮我订机票'为查航班、比价、下单的连续行动",
+      "搜索问答：先搜索 → 阅读结果 → 补充搜索 → 汇总回答"
+    ],
     "example": {
       "scenario": "问'DeepSeek-V3 的发布日期是哪天，那天下了吗雨？'——模型先 Thought：需要查发布日期，Action：调用搜索工具，Observation：2024-12-26，再 Thought：查那天天气，Action：天气 API……直到汇总答案。",
       "code": "# ReAct 的prompt模板长这样（伪代码）\n'''\nQuestion: 北京今天适合穿什么？\nThought: 我需要先知道北京今天的天气\nAction: weather_api(city='北京')\nObservation: 晴，-3~5°C，西北风3级\nThought: 气温低于0度且风大，需要穿厚外套\nFinal Answer: 建议穿羽绒服或厚大衣，注意防风。\n'''",
       "lang": "python"
     },
+    "related": [
+      "react-loop",
+      "function-calling",
+      "agent"
+    ],
+    "extended": "进阶方向：ReAct 原论文、Plan-and-Execute 与 ReAct 的取舍、Reflexion（在 ReAct 上加反思）",
     "image": "images/react-pattern.png"
   },
   {
     "id": "hallucination",
     "category": "大模型基础",
     "name": "幻觉（Hallucination）",
+    "summary": "模型一本正经地编造事实的现象——理解它、缓解它是 LLM 应用可信度的生命线。",
     "description": "模型生成看似流畅合理、实则与事实不符的内容的现象，根源是模型本质在做'基于概率的文本续写'而非查证事实。训练数据错误、知识过时、prompt 矛盾、采样随机性都可能诱发。缓解手段：RAG（用检索到的事实约束生成）、要求引用来源、降低 temperature、让模型自查、关键场景人工审核。",
+    "background": "幻觉现象从统计语言模型时代就存在（'fluency over factuality'），LLM 时代被放大：模型太流畅，编的内容以假乱真。2023 年起成为学术和工业界焦点：评测基准（TruthfulQA）、缓解技术（RAG、引用约束）、推理模型通过强化学习降低幻觉。根本认知：模型是概率文本生成器，不是数据库，'不知道'从来不在它的默认选项里。",
+    "problem": "解决（缓解）'模型输出与事实不符'的问题：训练数据有错、知识过时、用户问题冷门、采样随机性，任何一环都可能触发编造。幻觉是 LLM 进企业生产环境（医疗、法律、金融）的最大阻力，几乎所有可靠性工程都围绕它展开。",
     "analogy": "像一个从不承认'不知道'的销售：你问什么他都滔滔不绝，答案听着头头是道，但细节可能是现编的。",
     "points": [
       "无法彻底消除，只能通过工程手段降低概率、及时发现",
       "对抗幻觉第一招：让模型'只根据提供的资料回答，资料里没有就说不知道'",
       "高价值场景（医疗、法律、金融）必须有人工兜底校验"
     ],
+    "pitfalls": [
+      "以为换更强的模型就没有幻觉——GPT-4 级模型照样流畅地编造，只是概率低一些",
+      "用'让模型自我检查'作为唯一防线——模型检查自己的幻觉，常常把幻觉再确认一遍",
+      "把 RAG 当万能药——检索到错误/过时资料时，模型会忠实地基于错误资料产生幻觉"
+    ],
+    "applications": [
+      "企业知识库问答：用 RAG + 引用约束把幻觉率压到可接受范围",
+      "医疗/法律咨询产品：强制'检索不到就承认不知道' + 人工审核兜底",
+      "新闻/内容生成平台：事实核查环节 + 来源标注要求",
+      "代码助手：生成的 API 用法需要 lint/测试验证，防止编造不存在的函数"
+    ],
     "example": {
       "scenario": "问'张三教授的代表作'——如果查无此人，模型可能编出《深度学习之美》（2021，清华大学出版社）这样真实感极强的假书。加了 RAG 后，检索不到张三的资料，模型会回答'知识库中没有该人物信息'。",
       "code": "system_prompt_guard = '''你是企业知识库助手，严格遵守：\n1. 只根据【检索资料】回答问题\n2. 回答末尾注明引用的资料编号，如 [1][2]\n3. 如果检索资料不足以回答，直接回复：\n   \"知识库中没有相关信息，建议咨询人工客服。\"\n4. 禁止使用你自己的背景知识推测。\n\n【检索资料】：{context}\n\n用户问题：{question}'''",
       "lang": "python"
     },
+    "related": [
+      "rag",
+      "rag-evaluation",
+      "prompt-engineering"
+    ],
+    "extended": "进阶方向：幻觉分类（事实性/忠实性）、RAGAS 忠实度指标、引用生成（attribution）技术",
     "image": "images/hallucination.png"
   },
   {
     "id": "context-window",
     "category": "大模型基础",
     "name": "上下文窗口（Context Window）",
+    "summary": "模型的'工作内存'上限：系统提示+历史+资料+输出全部共享这个 token 预算。",
     "description": "模型一次能处理的 token 总量上限，包含系统提示、对话历史、检索资料和模型输出，是一个共享的'总预算'。主流模型从 8K 到 1M token 不等。窗口内模型'看得到'全部内容（长文依赖中间内容的能力会衰减，即 lost in the middle），窗口外的内容则完全不可见，需要截断、摘要或外挂记忆来处理。",
+    "background": "早期 Transformer 受 O(n²) 注意力限制，窗口只有 512~2048 token。技术演进一路扩容：位置编码改进（RoPE、ALiBi）、注意力稀疏化、长文本训练策略，把主流模型推到 128K，Claude/Gemini 达到 200K~1M。'大海捞针'（needle in a haystack）测试成为衡量长窗口实际可用性的标准评测。",
+    "problem": "解决'长文档、长对话超出模型处理能力'的问题：没有大窗口，模型只能看片段；窗口扩容后整本书、整个代码库可以一次性处理。但窗口 ≠ 注意力：中间内容利用率低（lost in the middle）的问题仍在，需要工程手段弥补。",
     "analogy": "像一张固定大小的办公桌：所有资料（系统提示、历史对话、文档）都必须摊在桌面上才能被看到，桌子放不下就得收进抽屉（外存）按需取用。",
     "points": [
       "输入+输出共享窗口，长输入会挤压可输出空间",
       "窗口大≠注意力好：模型对窗口中间部分的信息利用率偏低",
       "超长对话的标准做法：旧对话摘要压缩 + 关键信息外挂向量库"
     ],
+    "pitfalls": [
+      "以为 128K 窗口 = 12.8 万汉字——中文 1 字约 1~2 token，实际能装的字更少",
+      "把窗口塞满再用——输出需要预留空间，且超长输入的中间内容容易被忽略",
+      "长对话只做截断不做摘要——关键信息（用户偏好、已达成的结论）随裁剪丢失"
+    ],
+    "applications": [
+      "长文档问答：整份合同/论文直接丢进去总结、审阅",
+      "代码助手：整个仓库上下文一次性理解，跨文件重构",
+      "长对话产品：窗口内自由多轮，超出部分靠摘要压缩续命",
+      "RAG 上下文组装：在窗口预算内决定塞几个检索结果"
+    ],
     "example": {
       "scenario": "128K 窗口的模型：系统提示 500 + 多轮历史 30K + 检索文档 60K + 预留输出 4K = 94.5K，还剩 33.5K 余量。若再塞入 50K 文档就会超限报错，必须先做摘要或减少检索条数。",
       "code": "import tiktoken\nenc = tiktoken.get_encoding('cl100k_base')\n\ndef count_tokens(messages):\n    return sum(len(enc.encode(m['content'])) for m in messages)\n\nCONTEXT_LIMIT = 128_000\nmessages = [{'role': 'system', 'content': '...'},\n            {'role': 'user', 'content': '...'}]\nused = count_tokens(messages)\nreserve = 4_000                        # 给输出留的空间\nif used + reserve > CONTEXT_LIMIT:\n    messages = messages[:1] + messages[-10:]  # 保留system+最近10条\n    # 更好的做法：把被裁剪的历史先摘要成一条",
       "lang": "python"
     },
+    "related": [
+      "short-term-memory",
+      "token",
+      "context-compression"
+    ],
+    "extended": "进阶方向：RoPE/ALiBi 位置编码、KV Cache 显存计算、大海捞针评测、RAG 与长上下文的取舍",
     "image": "images/context-window.png"
   },
   {
     "id": "function-calling",
     "category": "大模型基础",
     "name": "Function Calling（函数调用）",
+    "summary": "让模型输出结构化的'函数调用请求'，是 LLM 从会说话到会办事的关键一步。",
     "description": "让模型根据用户意图输出结构化的函数调用请求（函数名 + JSON 参数），由应用代码执行后把结果回传给模型继续生成。模型本身不执行函数，只负责'决定调什么、传什么参数'，执行权和副作用都在你的代码里。这是 Agent 连接现实世界（查库、下单、发邮件）的标准通道，比让模型输出自由文本再正则解析可靠得多。",
+    "background": "2023 年 6 月 OpenAI 正式发布 Function Calling，迅速成为行业标准（各家 API 兼容同名概念）。它把此前'让模型输出 JSON 再祈祷格式正确'的脆弱做法，变成模型原生能力：模型在训练中专门学过'什么时候该调函数、参数怎么填'。后续发展为并行调用多个工具、强制调用指定工具等进阶能力。",
+    "problem": "解决'LLM 只能生成文本、无法安全可靠地操作现实系统'的问题：自由文本输出解析脆弱（格式一变就崩），而 function calling 用 schema 约束输出，把'决定权'留给模型、把'执行权'留在代码里，边界清晰、安全可控。",
     "analogy": "模型像前台接线员：听懂客户需求后填一张标准工单（函数名+参数），转交给后端部门（你的代码）处理，再把处理结果转述给客户。",
     "points": [
       "模型返回 tool_calls 字段，你执行后以 role=tool 消息回传结果",
       "参数靠 JSON Schema 约束，schema 写得越清楚调用越准",
       "执行函数时要做好鉴权、重试和异常处理，错误信息也要回传给模型"
     ],
+    "pitfalls": [
+      "以为模型会执行函数——它只输出'调用意图'，执行永远在你的代码里",
+      "工具 schema 随手写——description 含糊导致模型乱传参，是调用准确率低的第一原因",
+      "工具执行失败直接抛异常——错误信息也应该回传给模型，让它调整策略重试"
+    ],
+    "applications": [
+      "智能客服：查订单、改地址、发起退款，全部走结构化工具调用",
+      "数据分析：模型生成 SQL 调用请求，系统执行后回传结果解读",
+      "办公自动化：读写日历、发邮件、建文档，跨系统操作的中枢",
+      "Agent 框架的工具层：LangChain Tool、MCP 的底层都是 function calling"
+    ],
     "example": {
       "scenario": "用户说'帮我查北京明天的天气'——模型输出 get_weather({\"city\": \"北京\", \"date\": \"明天\"})，你的代码调用天气 API 后把 '{\"temp\": \"-3~5℃\", \"weather\": \"晴\"}' 回传，模型再生成自然语言回答。",
       "code": "tools = [{\n    'type': 'function',\n    'function': {\n        'name': 'get_weather',\n        'description': '查询指定城市指定日期的天气',\n        'parameters': {\n            'type': 'object',\n            'properties': {\n                'city': {'type': 'string', 'description': '城市名'},\n                'date': {'type': 'string', 'description': '今天/明天/具体日期'}\n            },\n            'required': ['city']\n        }\n    }\n}]\n# 模型返回: choices[0].message.tool_calls[0].function\n# -> name='get_weather', arguments='{\"city\": \"北京\", \"date\": \"明天\"}'",
       "lang": "python"
     },
+    "related": [
+      "json-schema-tools",
+      "react-loop",
+      "mcp"
+    ],
+    "extended": "进阶方向：parallel tool calls、strict mode（强制 schema 合法）、instructor 库的结构化输出封装",
     "image": "images/function-calling.png"
   },
   {
     "id": "model-selection",
     "category": "大模型基础",
     "name": "模型选型",
+    "summary": "按任务难度、成本、延迟、合规选对模型——80% 的调用其实不需要最贵的模型。",
     "description": "根据任务难度、成本预算、延迟要求和数据合规约束选择合适的大模型。核心原则是'够用就好'：分类、抽取、改写等轻任务用小模型或 Flash 档，复杂推理和Agent 主控才需要旗舰模型。还要考虑私有化部署（数据不出域）、上下文长度、是否支持视觉/函数调用等能力维度。",
+    "background": "2023 年前'一个 GPT-4 打天下'；随着模型供给爆发（OpenAI/Anthropic/DeepSeek/Qwen/GLM...），价格差拉到 50 倍以上，模型路由（model routing）成为工程学科。趋势是'分层调用'：轻任务小模型、复杂任务旗舰、推理任务推理模型，配合缓存与批处理进一步压缩成本。",
+    "problem": "解决'性能与成本不可兼得'的问题：全用旗舰模型，账单爆炸；全用便宜模型，复杂任务翻车。选型 + 分级路由让每一分钱花在刀刃上——分类、抽取这类任务，小模型和旗舰的准确率差距往往不到 2%，成本却差 20 倍。",
     "analogy": "打车选车：一个人通勤坐经济型（Flash/mini），全家出游带行李选商务型（旗舰模型），重要的合同谈判才叫专车（o1/R1 推理模型）。",
     "points": [
       "常见分层：旗舰（GPT-4o/Claude/DeepSeek-R1）> 主力（4o-mini/V3）> 轻量（Flash 档）",
       "用评测集测自己的任务，别只看通用榜单（benchmark 不等于业务效果）",
       "成本差可达 50 倍：80% 的调用其实可以用便宜模型完成"
     ],
+    "pitfalls": [
+      "只看通用榜单选型——MMLU 高分不等于你的客服场景好用，必须用自己的评测集",
+      "换模型只换模型名——不同模型的 tokenizer、默认参数、风格都不同，prompt 需要重调",
+      "忽视隐形成本——便宜模型准确率低导致返工和人工审核，总成本反而更高"
+    ],
+    "applications": [
+      "客服系统分级：意图分类用 mini 档，标准问答用主力档，投诉升级用旗舰档",
+      "批处理任务（数据清洗、打标签）用便宜模型 + 批处理折扣价",
+      "数据合规要求私有化：金融/政务选可私有部署的开源模型（Qwen/DeepSeek）",
+      "Agent 主控选函数调用能力强的模型，而不是综合榜单最高的"
+    ],
     "example": {
       "scenario": "客服系统分层调用：意图分类（每秒几百次）用轻量模型（成本 1/50）；标准问答用主力模型；投诉升级、复杂工单才路由到旗舰模型——总成本降到全旗舰方案的 5% 而满意度几乎不变。",
       "code": "def pick_model(task: str) -> str:\n    ROUTE = {\n        'classify':  'gpt-4o-mini',    # 意图分类：快且便宜\n        'extract':   'gpt-4o-mini',    # 结构化抽取\n        'chat':      'deepseek-chat',  # 日常问答\n        'agent':     'gpt-4o',         # Agent 主控：需要强函数调用\n        'reasoning': 'deepseek-reasoner',  # 数学/复杂推理\n    }\n    return ROUTE.get(task, 'gpt-4o-mini')",
       "lang": "python"
     },
+    "related": [
+      "llm-api",
+      "prompt-engineering",
+      "evaluation-metrics"
+    ],
+    "extended": "进阶方向：模型路由框架（RouteLLM）、成本/效果帕累托曲线、模型评测集建设方法",
     "image": "images/model-selection.png"
   },
   {
     "id": "agent",
     "category": "AI Agent 核心",
     "name": "Agent（智能体）",
+    "summary": "LLM + 规划 + 工具 + 记忆构成的自主系统：给目标不给步骤，它自己想怎么做。",
     "description": "以 LLM 为'大脑'，加上规划（Planning）、记忆（Memory）、工具（Tools）和行动循环（Action Loop）构成的自主系统：给定目标后，它能自己拆解任务、选择工具、执行动作、观察结果并调整策略，循环直到完成目标。与'一问一答'的 Chatbot 的本质区别是：Agent 有目标导向和自主决策，Chatbot 只有被动应答。",
+    "background": "Agent 概念来自经典 AI（90 年代就有'智能体'理论），2023 年随 LLM 爆发重生：AutoGPT（2023.3）第一次让大众看到'AI 自主循环干活'，虽然实际可用性差，但点燃了方向。2023-2024 年 LangChain/LangGraph 等框架把 Agent 工程化，2025 年 OpenAI Deep Research、Claude Code、Manus 等产品证明：足够强的模型 + 合理的工程 = 真正能干活的 Agent。",
+    "problem": "解决'一问一答的 Chatbot 干不了复杂任务'的问题：'帮我调研并写份报告'需要几十步操作（搜索、阅读、整合、写作），人机一问一答的模式撑不住。Agent 把'目标→自主执行→交付结果'的闭环交给 AI，人只做验收。",
     "analogy": "Chatbot 像查号台（问什么答什么），Agent 像助理（你说'帮我订下周去上海的行程'，它自己查航班、比价、看日历、下单、发确认给你）。",
     "points": [
       "四大件：LLM（大脑）+ 规划（拆任务）+ 工具（手脚）+ 记忆（经验）",
       "行动循环的通用结构：感知 → 思考 → 行动 → 观察 → 再思考",
       "Agent 的上限由三件事决定：模型能力、工具质量、prompt 设计"
     ],
+    "pitfalls": [
+      "把带一个工具调用的问答链叫 Agent——没有自主决策循环，只是 LLM Chain",
+      "工具给得越多越好——候选超过 20 个选择准确率明显下降，按任务裁剪工具集",
+      "不设任何人类确认点——Agent 有真实副作用（发邮件、下订单）时必须留审批卡点"
+    ],
+    "applications": [
+      "编程 Agent（Claude Code/Cursor）：读代码库、改代码、跑测试、自修复",
+      "深度研究（Deep Research 类）：多轮搜索、交叉验证、生成长报告",
+      "客服运维：自动查日志、定位故障、执行预案、生成报告",
+      "个人助理：订机票、管日程、整理邮件的端到端代办"
+    ],
     "example": {
       "scenario": "数据分析 Agent 收到'分析上月销量下滑原因'：规划→拆成拉数据/查竞品/看舆情三步→依次调用 SQL 工具、爬虫工具、搜索工具→汇总生成报告。全程只需人类确认最终结论。",
       "code": "# Agent 主循环的通用骨架（伪代码）\nmessages = [{'role': 'system', 'content': AGENT_PROMPT},\n            {'role': 'user', 'content': goal}]\nfor step in range(MAX_STEPS):              # 死循环保护\n    resp = llm.chat(messages, tools=TOOLS)\n    if resp.tool_calls:                    # 模型要用工具\n        for call in resp.tool_calls:\n            result = execute(call)         # 真实执行\n            messages.append(tool_msg(call, result))\n    else:                                  # 没有工具调用=最终答案\n        return resp.content",
       "lang": "python"
     },
+    "related": [
+      "react-loop",
+      "planning",
+      "tool-use",
+      "multi-agent"
+    ],
+    "extended": "进阶方向：Anthropic《Building Effective Agents》、LangGraph 状态机、Agent 评测（SWE-bench/GAIA）",
     "image": "images/agent.png"
   },
   {
     "id": "planning",
     "category": "AI Agent 核心",
     "name": "规划（Planning）",
+    "summary": "把'登上月球'拆成'造火箭、造飞船、选航线'的能力——复杂任务的第一生产力。",
     "description": "Agent 把复杂目标拆解为可执行的子任务序列，并在执行中动态调整的能力。经典策略：Plan-and-Execute（先一次性生成完整计划再逐步执行）、ReWOO（把规划与工具调用解耦省 token）、Reflexion（失败后反思并重规划）。规划质量直接决定 Agent 能否处理需要多个步骤、多个工具的复杂任务。",
+    "background": "规划是经典 AI 的核心课题（STRIPS、HTN 规划器都是几十年的老学问）。LLM Agent 时代规划重新火热：2023 年 Plan-and-Execute、ReWOO、HuggingGPT 等工作探索'先规划后执行'与'边想边做'的平衡。经验共识：LLM 长期规划仍不可靠，需要外部结构（任务清单、状态机、检查点）来兜住。",
+    "problem": "解决'复杂目标直接开干会迷路'的问题：不拆解就执行，Agent 容易遗漏步骤、重复劳动或在第 7 步忘记第 1 步的目标。显式计划让执行有路线图，也让人类能在计划层面介入审查，而不是等它跑偏两小时后喊停。",
     "analogy": "装修前的设计师出图：先画完整施工图（计划），再按工序一步步来（执行）；中途发现墙体是承重墙（观察），立刻改图（重规划）。",
     "points": [
       "先规划后执行省 token、可审查；边想边做灵活但成本高",
       "计划要写成显式的任务清单，便于人类介入审批和断点续跑",
       "子任务粒度是关键：太粗没法执行，太细浪费 token 还容易跑偏"
     ],
+    "pitfalls": [
+      "计划粒度失衡——'写报告'太粗没法执行，'打开浏览器点搜索框'太细浪费 token",
+      "计划一次生成后死板执行——真实任务中途信息会变，必须支持重规划",
+      "计划只存在于对话文本里——应结构化存储（JSON 清单），可断点续跑、可审计"
+    ],
+    "applications": [
+      "研究报告生成：定大纲 → 逐节搜集 → 逐节撰写 → 汇总审校",
+      "数据处理流水线：拉数 → 清洗 → 分析 → 可视化，每步有验收标准",
+      "旅行规划 Agent：查签证 → 订机票 → 排日程 → 预订酒店，依赖关系清晰",
+      "软件修 bug：复现 → 定位 → 修改 → 测试 → 提交的标准工序"
+    ],
     "example": {
       "scenario": "目标'写一份竞品分析报告'被拆成：1) 确定竞品清单 2) 抓取各竞品定价页 3) 抓取应用商店评分评论 4) 汇总成对比表 5) 撰写分析。每步完成后检查产物质量再进入下一步。",
       "code": "plan_prompt = '''你是任务规划师。把用户目标拆成有序子任务列表，\n每个子任务标注：需要什么工具、完成的验收标准、依赖哪个前置任务。\n只输出 JSON：{\"tasks\": [{\"id\": 1, \"desc\": \"\", \"tool\": \"\",\n\"acceptance\": \"\", \"depends_on\": []}]}\n\n目标：{goal}'''\n\n# 执行时逐个完成，验收不过就重做该步，全部通过才进入汇总",
       "lang": "python"
     },
+    "related": [
+      "agent",
+      "working-memory",
+      "react-loop"
+    ],
+    "extended": "进阶方向：Plan-and-Execute vs ReAct 的取舍、ReWOO（解耦规划省 token）、任务依赖图（DAG）调度",
     "image": "images/planning.png"
   },
   {
     "id": "tool-use",
     "category": "AI Agent 核心",
     "name": "工具调用（Tool Use）",
+    "summary": "给 LLM 装上手和脚：查数据库、调 API、执行代码——从'知道'到'做到'。",
     "description": "Agent 通过调用外部 API、函数、数据库来获取信息或产生真实世界效果的能力，弥补 LLM'只会生成文本、不能行动'的短板。每个工具需要：清晰的名称和描述、类型化的参数定义、统一的执行与错误处理。工具描述质量是 Agent 准确选工具的第一决定因素——模型是'读着说明书用工具'的。",
+    "background": "Toolformer（2023.2）证明模型可以自学什么时候调 API；同年 OpenAI Function Calling 发布后，工具使用从研究走向工程标配。2024 年 MCP 协议统一了工具接入标准。核心认知转变：模型的知识有截止日期且无法行动，工具是它伸向实时世界和真实系统的义肢。",
+    "problem": "解决'LLM 知识过时、无法操作外部系统'的问题：模型不知道今天天气、查不了你的订单、发不了邮件。工具调用让'能用嘴回答'升级为'能动手办事'，同时把实时数据和私有数据带进对话。",
     "analogy": "模型是会用工具的工人，工具描述是工具箱里的标签：标签写着'十字螺丝刀：拧十字螺丝'，它就不会拿去敲钉子。",
     "points": [
       "工具宜少而精：候选工具太多会显著降低选择准确率",
       "工具描述要写'什么时候该用/不该用'，而不只是功能说明",
       "所有工具必须有超时、重试和白名单控制，防止 Agent 闯祸"
     ],
+    "pitfalls": [
+      "工具描述只写函数签名不写使用时机——模型不知道'什么时候该用'，选错工具",
+      "一个 Agent 塞几十个工具——工具过多互相干扰，正确做法是按场景拆分多组工具",
+      "工具无鉴权无白名单——被 prompt 注入诱导后执行危险操作（删库、对外发消息）"
+    ],
+    "applications": [
+      "企业系统操作：CRM 查客户、ERP 下单、ITSM 建工单",
+      "实时信息获取：天气、股价、汇率、新闻搜索",
+      "代码执行：算数学、跑数据处理、生成图表（Code Interpreter 模式）",
+      "多模态操作：图像生成、文档转换、OCR 识别"
+    ],
     "example": {
       "scenario": "订单客服 Agent 配备三个工具：query_order(查订单)、apply_refund(发起退款)、escalate(转人工)。用户说'东西没到怎么退'，Agent 先 query_order 确认物流状态，再决定是解释等待还是 apply_refund。",
       "code": "def query_order(order_id: str) -> dict:\n    '''按订单号查询订单状态。仅支持本店铺订单，\n    返回: {status, logistics, created_at}。查询失败返回 error 字段。'''\n    data = db.query('SELECT * FROM orders WHERE id=%s', order_id)\n    if not data:\n        return {'error': f'订单 {order_id} 不存在'}  # 错误也返回给模型\n    return {'status': data.status, 'logistics': data.logistics,\n            'created_at': str(data.created_at)}",
       "lang": "python"
     },
+    "related": [
+      "json-schema-tools",
+      "function-calling",
+      "mcp"
+    ],
+    "extended": "进阶方向：MCP 协议、工具鉴权与沙箱、工具选择准确率评测",
     "image": "images/tool-use.png"
   },
   {
     "id": "json-schema-tools",
     "category": "AI Agent 核心",
     "name": "工具描述（JSON Schema）",
+    "summary": "用 JSON Schema 给工具写'使用说明书'——说明书写得好坏直接决定模型调得准不准。",
     "description": "用 JSON Schema 格式声明工具的名称、功能描述、参数类型、必填项和取值约束，让模型'看懂'如何正确传参。描述质量直接影响调用准确率：参数含义模糊、缺少示例、约束不清都会导致模型瞎猜参数。好的实践包括给枚举值列全、给参数写清楚单位、说明字段之间的依赖关系。",
+    "background": "JSON Schema 是 2010 年代成熟的数据描述标准。2023 年 OpenAI 把它引入 Function Calling 后，'工具描述'从开发文档升级为 prompt 的一部分——模型真的会逐字读你的 description 并据此决策。实践统计：参数描述的质量对调用准确率的影响，甚至大于模型本身的差异。",
+    "problem": "解决'模型传参靠猜'的问题：不写清楚'city 是中文还是拼音''date 支持哪些格式''amount 的单位'，模型就按最常见的理解猜，猜错一次流程就断。结构化描述 + 枚举约束 + 示例，把猜测变成选择题。",
     "analogy": "银行单据上的字段说明：'金额（大写，单位元）''账号（13-19 位数字）'——说明写得越明确，填错的概率越低。",
     "points": [
       "description 字段不是摆设，是模型的'使用说明书'，值得认真写",
       "用 enum 列出所有合法取值，比在描述里写'只能填 A/B/C'有效",
       "required 数组必须准确，漏写会导致模型漏传关键参数"
     ],
+    "pitfalls": [
+      "required 数组漏写——模型漏传关键参数，运行时空指针",
+      "参数描述写'用户名'而不写'用户手机号，11 位数字'——颗粒度不够等于没写",
+      "该用 enum 的地方用自由字符串——城市、币种、状态码这类有限集合必须枚举，杜绝编造"
+    ],
+    "applications": [
+      "API 网关式 Agent：几十个内部接口包装成工具，schema 统一治理",
+      "低代码平台：用户配置的每个节点自动生成 schema 供模型调用",
+      "数据库查询工具：表名、字段、时间格式全部枚举化，SQL 生成准确率翻倍",
+      "多语言团队协作：schema 即接口文档，前后端和模型三方对齐"
+    ],
     "example": {
       "scenario": "订机票工具的 schema：departure/arrival 用 enum 列出支持的城市代码（防止模型编造城市）、date 注明'格式 YYYY-MM-DD，只能订未来 90 天内'、cabin 注明默认经济舱——调用准确率从 70% 提升到 95%+。",
       "code": "schema = {\n  'name': 'book_flight',\n  'description': '预订机票。当用户明确表达了订票意图时才调用。',\n  'parameters': {\n    'type': 'object',\n    'properties': {\n      'departure': {'type': 'string', 'enum': ['PEK', 'SHA', 'CAN'],\n                    'description': '出发机场三字码'},\n      'arrival':   {'type': 'string', 'enum': ['PEK', 'SHA', 'CAN'],\n                    'description': '到达机场三字码'},\n      'date':      {'type': 'string',\n                    'description': '起飞日期，YYYY-MM-DD，限未来90天内'},\n      'cabin':     {'type': 'string', 'enum': ['ECONOMY', 'BUSINESS'],\n                    'description': '舱位，用户未提及时用 ECONOMY'}\n    },\n    'required': ['departure', 'arrival', 'date']\n  }\n}",
       "lang": "python"
     },
+    "related": [
+      "tool-use",
+      "function-calling",
+      "pydantic"
+    ],
+    "extended": "进阶方向：OpenAPI/Swagger 自动转工具 schema、strict 模式（100% schema 合法）、工具描述的 A/B 评测",
     "image": "images/json-schema-tools.png"
   },
   {
     "id": "react-loop",
     "category": "AI Agent 核心",
     "name": "ReAct 循环",
+    "summary": "Agent 的发动机：思考→行动→观察的循环，配上刹车（步数上限）才是生产级。",
     "description": "Agent 的执行引擎：Thought（思考下一步）→ Action（调用工具）→ Observation（获得结果）不断循环，直到模型认为可以给出 Final Answer 或触发停止条件。工程实现要点：最大步数限制、单步超时、工具报错回传（而不是崩溃）、循环检测（相同调用重复出现时打断）。",
+    "background": "ReAct 循环源自 2022 年 ReAct 论文，工程化过程补齐了论文没讲的部分：循环如何终止、失败怎么处理、结果如何裁剪。LangChain 的 AgentExecutor、LangGraph 的 StateGraph 本质都是它的工程化变体。生产事故统计里，Agent 问题的两大来源就是'循环失控'和'上下文爆炸'——都发生在这一环。",
+    "problem": "解决'复杂任务需要多轮工具交互'的执行编排问题：人肉协调'查一下、看看结果、再查一下'效率极低。循环让模型自主驱动多步执行；而步数上限、重复检测、超时熔断这三重保险，则解决'自主'带来的失控风险。",
     "analogy": "侦探破案：推理案情（Thought）→ 走访证人（Action）→ 得到口供（Observation）→ 更新推理……直到证据链闭环（Final Answer）。每一步都基于上一步的真实发现，而不是瞎猜。",
     "points": [
       "循环必须有出口：最大步数、预算上限、重复检测三重保险",
       "Observation 内容太长要裁剪（只回传关键字段），否则几轮就撑爆上下文",
       "每一步的 Thought/Action/Observation 都应记录日志，便于调试复盘"
     ],
+    "pitfalls": [
+      "没有最大步数——模型'再确认一次'无限循环，一晚烧掉几百美元",
+      "Observation 全量塞回上下文——网页抓取结果几十 K token，三轮就超窗口",
+      "工具异常直接崩溃——异常应作为 Observation 回传，让模型自己调整"
+    ],
+    "applications": [
+      "深度搜索问答：搜索→读结果→补搜→再读→综合回答（Perplexity 类产品内核）",
+      "自动化运维：查告警→查日志→定位原因→执行预案→验证恢复",
+      "数据管道：理解需求→查表结构→写 SQL→执行→检查结果→修正",
+      "电商客服：查订单→判断状态→查退款政策→发起退款→通知用户"
+    ],
     "example": {
       "scenario": "问'我们公司 Q3 销售额环比增长了多少？'——Thought: 需要查 Q2 和 Q3 销售额 → Action: sql(query) → Observation: Q2=120万, Q3=150万 → Thought: 计算增长率 → Action: calculator((150-120)/120) → Observation: 0.25 → Final Answer: Q3 环比增长 25%。",
       "code": "def react_loop(goal, max_steps=8):\n    history = [system(AGENT_PROMPT), user(goal)]\n    seen_calls = []\n    for step in range(max_steps):          # 保险1: 最大步数\n        msg = llm.chat(history, tools=TOOLS)\n        if not msg.tool_calls:             # 出口1: 模型给出最终答案\n            return msg.content\n        for call in msg.tool_calls:\n            key = (call.name, str(call.args))\n            if key in seen_calls:          # 保险2: 重复调用检测\n                obs = {'error': '重复调用，请换个思路'}\n            else:\n                obs = run_tool(call)       # 真实执行\n                seen_calls.append(key)\n            history.append(tool_msg(call, trim(obs)))  # 裁剪过长的结果\n    return '已达到最大步数，任务未完成。'   # 保险3: 兜底",
       "lang": "python"
     },
+    "related": [
+      "react-pattern",
+      "loop-guard",
+      "context-window"
+    ],
+    "extended": "进阶方向：LangGraph 状态机替代裸循环、观察结果压缩策略、循环轨迹的可视化调试（LangSmith/Langfuse）",
     "image": "images/react-loop.png"
   },
   {
     "id": "short-term-memory",
     "category": "AI Agent 核心",
     "name": "短期记忆",
+    "summary": "对话的'工作台'：上下文窗口里的近期历史，好用但昂贵且有限。",
     "description": "Agent 当前对话的上下文内容，直接存放在模型上下文窗口里，随对话轮次增长。特点是读写即得、精度高，但受 token 上限约束且每轮都重发全量历史（成本线性增长）。管理策略：滑动窗口（只留最近 N 轮）、历史摘要压缩、按重要性裁剪（保留系统提示和关键决策，丢弃闲聊）。",
+    "background": "短期记忆的概念随着对话产品兴起而工程化。早期 ChatGPT 只做简单截断（超出就丢最早的），2023 年后摘要压缩（conversation summarization）、重要性裁剪等策略成熟。成本视角的觉醒是关键推手：人们发现多轮对话的账单里 80% 在为重复发送的历史付费。",
+    "problem": "解决'多轮对话需要连贯，但窗口和预算都有限'的问题：不管理历史，30 轮后每轮都在全量重发（慢且贵）；粗暴截断，用户第 2 轮说的偏好第 30 轮就被遗忘。需要'该留的留、该压的压、该忘的忘'。",
     "analogy": "工作台上的便利贴：随手可看、即时生效，但桌面就这么大，旧的便利贴要么扔掉要么抄进笔记本（长期记忆）。",
     "points": [
       "成本陷阱：10 轮对话后每轮都在为全部历史付费",
       "系统提示必须常驻，被裁剪的永远只能是历史消息",
       "摘要压缩要在'信息保真'和'token 节省'间平衡，关键数字别摘要丢"
     ],
+    "pitfalls": [
+      "无脑全量保留——token 成本随轮数二次增长，响应越来越慢",
+      "滑动窗口裁掉了 system prompt——角色和规则瞬间失效，行为漂移",
+      "摘要把数字、日期、专有名词'概括'丢了——摘要 prompt 必须强制保留关键实体"
+    ],
+    "applications": [
+      "客服对话：保留最近 10 轮原文 + 更早内容的摘要，兼顾连贯与成本",
+      "角色扮演/陪伴类产品：人设常驻 system，剧情摘要在窗口内滚动",
+      "编程助手：保留当前文件的最新版本和最近指令，丢弃早期探索过程",
+      "多 Agent 系统：每个 Agent 只带与自己职责相关的对话片段"
+    ],
     "example": {
       "scenario": "用户先说'我对花生过敏'（第 2 轮），聊天 30 轮后问'推荐个零食'——若滑动窗口只留最近 10 轮，过敏信息已被裁掉，Agent 可能推荐花生酥。解决方案：过敏等关键信息要写入长期记忆或常驻系统提示。",
       "code": "class ShortTermMemory:\n    def __init__(self, max_turns=10):\n        self.max_turns = max_turns\n        self.messages = []\n\n    def add(self, msg):\n        self.messages.append(msg)\n        self.trim()\n\n    def trim(self):\n        # 始终保留 system（下标0），只裁剪历史\n        if len(self.messages) > self.max_turns * 2 + 1:\n            dropped = self.messages[1:-self.max_turns*2]\n            summary = summarize('\\n'.join(m['content'] for m in dropped))\n            self.messages = [self.messages[0],\n                             {'role': 'system',\n                              'content': f'[历史摘要]{summary}'}] \\\n                            + self.messages[-self.max_turns*2:]",
       "lang": "python"
     },
+    "related": [
+      "context-window",
+      "long-term-memory",
+      "token"
+    ],
+    "extended": "进阶方向：对话摘要策略、记忆分层架构（工作台+笔记本+档案室）、MemGPT 式虚拟上下文管理",
     "image": "images/short-term-memory.png"
   },
   {
     "id": "long-term-memory",
     "category": "AI Agent 核心",
     "name": "长期记忆",
+    "summary": "跨会话的'档案柜'：把重要信息存进数据库，下次聊天还能想起来。",
     "description": "把需要跨会话保留的信息（用户偏好、历史决策、重要事实）持久化到向量数据库或关系库，需要时检索出来注入 prompt。与短期记忆的本质区别：存在模型外、容量近乎无限、跨会话可用。实现要点：什么时候写入（用户陈述偏好/做出决策时）、怎么检索（向量相似度+时间衰减）、怎么注入（拼进 system 或作为上下文段落）。",
+    "background": "2023 年 MemGPT 论文把操作系统的分页思想引入 LLM 记忆管理，引发记忆架构热潮。2024 年 ChatGPT 上线 Memory 功能让大众感知到'AI 记得我'。工程实践分化出两条路线：向量记忆（语义检索历史片段）和结构化记忆（抽取事实存字段，如'用户不吃香菜'）。开源方案有 Mem0、Letta、Zep 等。",
+    "problem": "解决'每次会话都从零开始'的问题：用户上周说过'团队用 Python'，这周问问题还要再解释一遍；VIP 客户的偏好每次都要重新采集。长期记忆让服务随使用时间增值，而不是每次归零。",
     "analogy": "个人助理的记事本：客人上次说'不吃香菜'，三个月后再来订餐，助理翻一下本子就能主动避开香菜。",
     "points": [
       "不是所有对话都值得存：偏好、事实、决策存，寒暄丢弃",
       "检索时要带时间戳和来源，旧记忆可能已失效（用户换了手机号）",
       "写入前先查重和合并，否则记忆库会被同义信息塞满"
     ],
+    "pitfalls": [
+      "什么都存——记忆库变成垃圾场，检索噪声反而干扰回答，要有写入标准",
+      "记忆永不更新——用户换了手机号、换了团队，旧记忆变成错误答案来源，要有时间戳和覆盖机制",
+      "记忆不隔离——A 用户的记忆泄漏给 B 用户，严重的数据安全事故"
+    ],
+    "applications": [
+      "个人助理：记住用户日程习惯、沟通风格、家庭信息",
+      "销售/客服 CRM：客户历史诉求、偏好、投诉记录自动注入对话",
+      "学习产品：记住学员的知识薄弱点，动态调整讲解深度",
+      "游戏 NPC：记住与玩家的过往互动，剧情有连续性"
+    ],
     "example": {
       "scenario": "第 1 次对话用户说'我们团队用 Python，别给我 Java 示例'——这句话被提取成记忆 {user_id, '编程语言偏好: Python'} 存入向量库。第 15 次对话问'写个爬虫'时，检索命中该记忆，Agent 直接给 Python 实现。",
       "code": "memory = chroma_client.create_collection('user_memory')\n\n# 写入：用户陈述偏好时\ndef remember(user_id, text):\n    memory.add(\n        documents=[text],\n        metadatas=[{'user_id': user_id, 'ts': time.time()}],\n        ids=[str(uuid4())]\n    )\n\nremember('u001', '团队统一用Python，不要Java示例')\n\n# 读取：每轮对话前检索相关记忆\nrelevant = memory.query(\n    query_texts=[user_input],\n    n_results=3,\n    where={'user_id': 'u001'}\n)['documents'][0]\nsystem_prompt += f'\\n[已知用户偏好]\\n' + '\\n'.join(relevant)",
       "lang": "python"
     },
+    "related": [
+      "vector-database",
+      "short-term-memory",
+      "rag"
+    ],
+    "extended": "进阶方向：Mem0/Letta 框架、记忆写入策略（何时存、存什么）、记忆冲突消解",
     "image": "images/long-term-memory.png"
   },
   {
     "id": "working-memory",
     "category": "AI Agent 核心",
     "name": "工作记忆",
+    "summary": "任务执行中的'草稿纸'：当前目标、进度、中间产物，断点恢复靠它。",
     "description": "Agent 在执行当前任务过程中维护的中间状态：任务目标、已完成的步骤、中间变量、当前计划的进度。它介于短期记忆（对话历史）和长期记忆（持久化知识）之间，生命周期与任务绑定——任务完成即归档，任务失败可用来断点恢复。工程上通常是一个状态对象（state/checkpoint），随每步执行更新。",
+    "background": "工作记忆概念借自认知科学（人脑的临时加工区）。工程化源自长任务的需求：一个跑 40 分钟的研究 Agent 如果进程崩溃就全部重来不可接受，必须像游戏存档一样随时持久化。LangGraph 的 checkpoint 机制、Temporal 式工作流引擎都内置了状态持久化，让'任务状态'成为一等公民。",
+    "problem": "解决'长任务的中断恢复和进度可见'问题：任务跑一半服务重启，从哪继续？用户想知道'现在进行到第几步'？改了需求想回退？——答案都是把任务状态显式化、可序列化、可回放。",
     "analogy": "做数学大题的草稿纸：记着'设总价为 x''第一步已算出单价'，做完这题草稿就翻篇，但中途被打断时看着草稿能接着算。",
     "points": [
       "状态要显式结构化（JSON/dict），不要藏在对话文本里",
       "支持 checkpoint 序列化，进程重启后能从断点继续任务",
       "每步执行后状态要可审计：谁改了什么、为什么，便于调试"
     ],
+    "pitfalls": [
+      "状态藏在对话文本里——无法序列化恢复，也无法做结构化审计",
+      "状态对象无限膨胀——把所有中间产物都塞进去，序列化和加载越来越慢，该落库的落库",
+      "状态更新不原子——并发或崩溃时出现'半新半旧'的脏状态，要按版本号整体更新"
+    ],
+    "applications": [
+      "长时研究 Agent：跑 1 小时的深度调研，中途可暂停、可恢复、可看进度",
+      "批量文档处理：10 万份合同抽取，每份处理完即存档，失败可单独重跑",
+      "人工介入流：Agent 到审批节点挂起，状态落盘，审批后从断点继续",
+      "调试与审计：回放某次任务的状态快照，定位'第 3 步为什么这么决策'"
+    ],
     "example": {
       "scenario": "订机票 Agent 的状态：{\"task\": \"订北京→上海机票\", \"done\": [\"查航班✓\", \"比价✓\"], \"current\": \"等待用户确认舱位\", \"candidates\": [航班列表]}——用户中途离开，回来后 Agent 看着状态从'确认舱位'继续，而不是从头再来。",
       "code": "from pydantic import BaseModel\nfrom typing import Literal\n\nclass TaskState(BaseModel):\n    goal: str\n    plan: list[str] = []\n    done_steps: list[str] = []\n    current_step: str = ''\n    artifacts: dict = {}          # 中间产物: 查到的航班列表等\n    status: Literal['running', 'waiting_user', 'done', 'failed'] = 'running'\n\nstate = TaskState(goal='订下周二北京到上海最便宜的机票')\nstate.plan = ['查航班', '比价', '用户确认', '下单']\nstate.done_steps = ['查航班', '比价']\nstate.current_step = '用户确认'\nstate.status = 'waiting_user'\nstate.save('checkpoint.json')     # 序列化后可断点恢复",
       "lang": "python"
     },
+    "related": [
+      "planning",
+      "short-term-memory",
+      "langgraph"
+    ],
+    "extended": "进阶方向：LangGraph checkpoint、事件溯源（event sourcing）模式、Human-in-the-loop 状态机",
     "image": "images/working-memory.png"
   },
   {
     "id": "multi-agent",
     "category": "AI Agent 核心",
     "name": "多 Agent 协作",
+    "summary": "多个 Agent 分工协作像团队干活——强大但昂贵，单 Agent 够用就别上。",
     "description": "多个 Agent 各自持有角色、工具和子目标，通过消息传递或共享状态协作完成单个 Agent 难以胜任的复杂任务。常见拓扑：主管模式（一个 Manager 分派任务给专家 Agent）、流水线模式（按工序接力）、辩论模式（多个 Agent 互相质证提高结论质量）。代价是 token 成倍增加、延迟叠加、调试复杂度上升，单 Agent 够用时不要上多 Agent。",
+    "background": "2023 年 AutoGen、MetaGPT、CAMEL 等框架掀起多 Agent 研究热：软件公司模拟（MetaGPT 的产品经理→架构师→程序员流水线）、群聊辩论等花样迭出。2024-2025 年冷静下来：实践发现多 Agent 的 token 成本和调试复杂度远超预期，'单 Agent + 好工具'能解决 80% 的场景，多 Agent 留给真正需要分工的场景。",
+    "problem": "解决'单个 Agent 装不下'的问题：上下文装不下所有工具和资料（专家各带各的）、需要视角对抗防止一条道走到黑（写手和审稿人分离）、需要职责隔离和并行加速（多文档同时处理）。",
     "analogy": "医院会诊：主治医师（Manager）根据病情召集影像科、检验科专家各自出报告，最后由主治汇总诊断——分工带来专业度，但协调成本也真实存在。",
     "points": [
       "上多 Agent 的正当理由：工具/上下文太多塞不下、需要视角对抗、职责需要隔离",
       "主管模式最好起步：一个 Manager + N 个只干活的专家，拓扑简单好调试",
       "Agent 间通信协议要结构化（JSON 消息），纯自由文本传递容易信息失真"
     ],
+    "pitfalls": [
+      "为了'先进'而上多 Agent——token 成本 3-5 倍起步，延迟叠加，能单 Agent 就单 Agent",
+      "Agent 间用自由文本传话——信息失真累积，必须用结构化消息（JSON schema）",
+      "没有总指挥——平级 Agent 互相踢皮球，需要 Manager 模式或清晰的状态机流转"
+    ],
+    "applications": [
+      "内容生产流水线：调研员→撰稿人→事实核查员→编辑，质量层层把关",
+      "软件工程团队：规划者分解任务，多个编码 Agent 并行开发，测试 Agent 验收",
+      "投资研究：多空两个分析师独立研究后辩论，避免单视角偏见",
+      "客户旅程自动化：售前、商务、技术支持不同 Agent 接力服务同一客户"
+    ],
     "example": {
       "scenario": "内容生产流水线：调研 Agent（搜索资料）→ 写作 Agent（初稿）→ 审稿 Agent（挑事实错误和逻辑漏洞）→ 修改 Agent（按意见改稿）。任一环节产出不合格就打回上一步，最多回炉 2 次。",
       "code": "# 主管模式伪代码：Manager 分派，专家执行\nagents = {\n    'researcher': Agent(role='资料调研', tools=[web_search]),\n    'writer':     Agent(role='撰稿人', tools=[write_doc]),\n    'reviewer':   Agent(role='审稿人', tools=[fact_check]),\n}\n\nstate = Manager.plan('写一篇AI周报')\nfor task in state.tasks:\n    expert = agents[task.owner]\n    result = expert.run(task)                 # 专家执行\n    if not Manager.review(task, result):      # 主管验收\n        result = expert.run(task, feedback=Manager.review_notes)\n    state.share(result)                       # 结果进入共享状态",
       "lang": "python"
     },
+    "related": [
+      "agent",
+      "planning",
+      "crewai",
+      "autogen"
+    ],
+    "extended": "进阶方向：MetaGPT/CrewAI 的角色设计模式、A2A 协议、多 Agent 成本-收益评估框架",
     "image": "images/multi-agent.png"
   },
   {
     "id": "loop-guard",
     "category": "AI Agent 核心",
     "name": "死循环保护",
+    "summary": "给 Agent 装的刹车系统：步数上限、重复检测、预算熔断、失败升级。",
     "description": "防止 Agent 无限重复同一操作的一组工程机制。典型死循环场景：工具持续报错→模型反复重试同一调用、两个 Agent 互相踢皮球、计划无法收敛。保护手段：最大步数/最大 token 预算、超时熔断、重复调用检测（同参数调用出现 N 次即打断）、失败升级（转人工或换策略）、全局异常兜底。",
+    "background": "死循环保护是被真实事故'逼'出来的工程学科。2023 年 AutoGPT 用户晒出的疯狂账单（Agent 循环刷 API 一夜烧几百美元）是标志性事件。此后'Agent 安全护栏（guardrails）'成为标配工程：LangChain 的 max_iterations、LangGraph 的 recursion_limit、各家的预算控制 API 都源于此。",
+    "problem": "解决'自主系统的失控风险'问题：模型可能陷入重复调用、计划无法收敛、两个工具互相踢皮球。没有护栏的 Agent 是无刹车的新车——跑得越快越危险。护栏把'最多损失多少'变成可预算的常量。",
     "analogy": "扫地机器人的防困算法：在同一个区域卡住转圈时，强制换个房间或回充——不是它想通了，是兜底机制接管了。",
     "points": [
       "三道防线：步数上限（硬停）、重复检测（软提示）、预算熔断（止损）",
       "打断时给模型的反馈要引导换路：'已重复3次，请尝试其他方法或结束'",
       "必须记录被打断的现场，死循环本身就是最有价值的调试线索"
     ],
+    "pitfalls": [
+      "只有步数上限没有预算上限——单步超长输出照样烧钱",
+      "打断后不引导——只报'超过最大步数'，模型和用户都不知道下一步该怎么办",
+      "护栏现场不落盘——死循环是最有价值的调试素材，丢了就要靠猜"
+    ],
+    "applications": [
+      "所有生产环境 Agent 的标配：max_steps、max_budget、per-tool timeout",
+      "计费保护：单任务 token 花费超阈值自动暂停并通知",
+      "重复检测：相同参数的工具调用第 3 次直接返回引导性错误",
+      "升级机制：重试 N 次仍失败，转人工或降级为'给用户中间结果'"
+    ],
     "example": {
       "scenario": "Agent 连续 4 次调用 search('上海天气') 都因 API 限流失败，重复检测触发，向模型注入'搜索服务暂时不可用，请基于已有信息回答或告知用户稍后再试'，Agent 改为礼貌致歉并结束，而不是刷到天亮。",
       "code": "from collections import Counter\n\ncall_counter = Counter()\n\ndef guarded_execute(call, max_repeat=3):\n    key = (call.name, str(sorted(call.args.items())))\n    call_counter[key] += 1\n    if call_counter[key] >= max_repeat:\n        # 不再真实执行，直接给模型一个引导性错误\n        return {'error': f'该调用已失败{call_counter[key]}次，'\n                         '请更换工具或调整参数，或结束任务'}\n    try:\n        return run_tool(call)\n    except Exception as e:\n        return {'error': str(e)}   # 错误也要喂回模型而不是抛出中断",
       "lang": "python"
     },
+    "related": [
+      "react-loop",
+      "fault-tolerance",
+      "agent"
+    ],
+    "extended": "进阶方向：guardrails 框架（NeMo Guardrails）、Agent 权限分级、预算感知的动态策略切换",
     "image": "images/loop-guard.png"
   },
   {
     "id": "reflexion",
     "category": "AI Agent 核心",
     "name": "反思（Reflexion）",
+    "summary": "失败后先写'错题本'再重试——带着教训的第二次尝试成功率翻倍。",
     "description": "让 Agent 在任务失败后分析原因、生成语言化的经验教训，并在重试时把教训注入上下文，从而提高成功率的方法（2023 年论文提出）。与简单重试的区别：重试只是'再来一次'，反思是'带着上次的失败原因再来'。生成的反思还可以存入长期记忆，跨任务积累经验。",
+    "background": "2023 年论文《Reflexion: Language Agents with Verbal Reinforcement Learning》提出：不改模型参数，用语言化的自我反思实现'强化学习'效果。在 HumanEval 编码任务上，带 Reflexion 的 Agent 通过率比裸重试提升约 2 倍。它揭示了 LLM Agent 的独特优势：经验可以即时以文本形式积累，无需训练。",
+    "problem": "解决'失败重试只是重复失败'的问题：Agent 第一次因没处理空输入而挂，无脑重试大概率原地再挂。反思环节强制回答'为什么失败、下次改什么'，把失败信息转化为下次执行的先验。",
     "analogy": "考砸后的错题本：不只是重考一遍，而是先写清楚'第 3 题错在没看清单位'，下次考试前翻一遍错题本。",
     "points": [
       "反思质量取决于错误反馈是否具体：测试报错信息 > 只说'失败了'",
       "反思要可执行：'下次先读报错再改代码'优于'下次仔细点'",
       "存储的反思要有有效期和场景标签，避免过时经验误导新任务"
     ],
+    "pitfalls": [
+      "反思输入只有'失败了'三个字——没有具体错误反馈，反思只能瞎猜，反馈越具体反思越准",
+      "反思结论空洞（'下次仔细点'）——必须是可执行的具体行为（'先列出边界条件再写代码'）",
+      "教训无限堆积——过期和无关的教训会误导新任务，要按任务类型打标签并定期清理"
+    ],
+    "applications": [
+      "代码 Agent：测试不过 → 分析报错 → 总结教训 → 修好后带上教训写下一版",
+      "网页操作 Agent：点错按钮 → 反思'该先读页面结构' → 重新尝试",
+      "数据管道：抽取失败 → 反思'PDF 这页是表格要换解析器' → 换方案重跑",
+      "积累型学习：把反思结论存长期记忆，同类任务未来直接避坑"
+    ],
     "example": {
       "scenario": "代码 Agent 第一次没通过单元测试，反思生成：'失败原因：未处理输入为空列表的情况。教训：实现前先确认边界条件，写代码前先列出空输入、超长输入两个边界。'重试时这段话被加入上下文，Agent 先补空列表处理再提交，测试通过。",
       "code": "reflection_prompt = '''任务失败了。\n[你的做法] {attempt}\n[失败反馈] {error}\n请用3句话以内回答：\n1. 失败的根本原因是什么\n2. 下次尝试应该改变的一个具体做法\n只输出给下一次尝试看的教训。'''\n\nfor attempt in range(3):\n    result = agent.run(goal, lessons=lessons)\n    if result.ok:\n        break\n    lessons = llm(reflection_prompt.format(\n        attempt=result.trace, error=result.error))  # 带教训再战",
       "lang": "python"
     },
+    "related": [
+      "self-critique",
+      "long-term-memory",
+      "agent"
+    ],
+    "extended": "进阶方向：Reflexion 原论文、Tree of Thoughts 的回溯搜索、经验回放库构建",
     "image": "images/reflexion.png"
   },
   {
     "id": "self-critique",
     "category": "AI Agent 核心",
     "name": "自我批评（Self-Critique）",
+    "summary": "交卷前先自我挑刺：生成→批评→修订的三段式，产出质量的最后一道闸。",
     "description": "让模型在输出最终答案前，先以批判视角检查自己的产出：有没有事实错误、是否满足约束、有没有遗漏要求，发现问题就修改后再交。实现上通常是'生成 → 批评 → 修订'三段式，也可以用另一个模型扮演批评者（避免自己护短）。对写作质量、格式合规、指令遵循类任务提升明显。",
+    "background": "Self-Refine（2023.3）和 Self-Critique 系列工作证明：同一个模型换个'审稿人视角'再检查一遍，产出质量能稳定提升。核心发现是 LLM 生成时容易'顺着写下去'，而显式切换到评价模式能激活批判能力。进阶变体是让另一个模型（甚至不同厂商的模型）当批评者，避免'自己护短'。",
+    "problem": "解决'一遍成稿质量不稳'的问题：第一版输出常有格式不符、遗漏要求、事实含糊。批评环节按检查清单逐项核对，修订环节针对性修复——相当于内置了一道 QA 工序，比人工检查便宜几个数量级。",
     "analogy": "交报告前的自检清单：先别急着交，用'挑刺模式'通读一遍——格式对吗？数据对吗？老板要求的三点都覆盖了吗？发现毛病自己先改。",
     "points": [
       "批评环节要给检查清单，漫无目的的'检查一下'几乎没有效果",
       "批评和生成用不同模型（或至少不同会话）能减少'自我偏袒'",
       "每轮批评+修订都增加延迟和成本，只在关键产出上使用"
     ],
+    "pitfalls": [
+      "笼统地'检查一下质量'——没有检查清单的批评流于形式，必须逐项列明检查点",
+      "批评和生成用同一上下文连续进行——模型倾向肯定自己刚写的内容，至少要开新会话",
+      "每轮都自我批评——延迟和成本翻倍，只在关键产出上启用"
+    ],
+    "applications": [
+      "邮件/文案生成：检查称呼、语气、附件、字数约束，不合规就自动修订",
+      "结构化输出：对照 schema 检查字段完整性，缺字段自动补",
+      "法律/医疗文书：按 checklist 核对必备条款和引用来源",
+      "Agent 最终答案：提交前自检'是否回答了用户的全部子问题'"
+    ],
     "example": {
       "scenario": "Agent 写完邮件后自检：{'收件人对吗？称呼得体吗？附件提到了吗？字数超了吗？'}发现正文提了附件但没真正调用添加附件的工具，修订轮补上，避免了尴尬。",
       "code": "draft = llm(WRITE_PROMPT.format(brief=brief))\n\ncritique = llm(f'''你是严格的审稿人。对照需求逐项检查这封邮件：\n需求: {brief}\n草稿: {draft}\n输出JSON: {{\"pass\": bool, \"issues\": [\"问题1\", ...]}}''')\n\nif not critique['pass']:\n    final = llm(f'''根据审稿意见修订邮件，只输出最终版。\n意见: {critique['issues']}\n原稿: {draft}''')",
       "lang": "python"
     },
+    "related": [
+      "reflexion",
+      "prompt-engineering",
+      "chain-of-thought"
+    ],
+    "extended": "进阶方向：Self-Refine 论文、 Constitutional AI（RLAIF 的批评-修订训练法）、交叉模型互评",
     "image": "images/self-critique.png"
   },
   {
     "id": "rag",
     "category": "RAG 检索增强生成",
     "name": "RAG（Retrieval-Augmented Generation）",
+    "summary": "让模型'开卷考试'：先检索知识库再回答，私有知识+少幻觉+可溯源。",
     "description": "检索增强生成：回答问题前先从知识库检索相关文档片段，把检索结果作为上下文连同问题一起交给 LLM 生成答案。它让模型'开卷考试'，以极低成本获得实时知识、私有知识，并显著减少幻觉、支持引用溯源。完整链路：文档解析→分块→向量化→入库→检索→（重排）→生成。是企业落 LLM 应用最常用的架构。",
+    "background": "2020 年 Facebook（Meta）论文《Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks》正式提出 RAG。2023 年随企业落地潮爆发为最主流的 LLM 应用架构——因为它解决了三个企业最疼的问题：私有知识不在训练集里、知识频繁更新不能重训、回答必须有据可查。向量数据库、embedding 模型两个产业也随 RAG 一起起飞。",
+    "problem": "解决'模型不知道你的私有知识，而且还会一本正经地编'的问题：让模型直接回答公司制度，它只能编；重新训练成本高不可攀。RAG 把'知识'外置到可随时更新的检索库，模型只负责'阅读理解和表达'，分工清晰。",
     "analogy": "开卷考试：与其让考生（模型）死记硬背全部教材（微调），不如让他带着教材进场，翻到相关页（检索）照着作答（生成），还能标注出自哪一页（引用）。",
     "points": [
       "RAG vs 微调：知识更新快、需要溯源选 RAG；风格/格式内化选微调",
       "答案质量上限由检索质量决定：垃圾进垃圾出，先优化检索",
       "必须设计'检索不到怎么办'的兜底话术，别让模型硬编"
     ],
+    "pitfalls": [
+      "检索不准就换更大的模型——答案质量的上限由检索决定，先修召回再谈生成",
+      "一次搭建永不评测——文档更新、换 embedding 后效果悄悄劣化，评测集要常跑",
+      "没有兜底设计——检索不到时模型硬编，应明确输出'知识库中未找到'并转人工"
+    ],
+    "applications": [
+      "企业知识库问答：HR 制度、产品手册、技术文档的智能问答（最普及场景）",
+      "客服系统：基于工单历史和产品文档回答，带引用来源",
+      "法律/医疗检索辅助：条款和指南检索 + 忠实生成，人工最终把关",
+      "代码库问答：'这个配置在哪定义的？'——索引整个仓库后秒答"
+    ],
     "example": {
       "scenario": "企业 HR 问答机器人：员工问'年假有几天'→ 向量库检索出《员工手册》第 12 条（入职满 1 年 5 天…）→ LLM 基于该条款回答并标注出处。手册每年更新只需重新入库，不用重新训练模型。",
       "code": "# LangChain 最小 RAG 链路\nfrom langchain_chroma import Chroma\nfrom langchain_openai import OpenAIEmbeddings, ChatOpenAI\n\nvectorstore = Chroma(persist_directory='./kb',\n                     embedding_function=OpenAIEmbeddings())\nretriever = vectorstore.as_retriever(search_kwargs={'k': 3})\nllm = ChatOpenAI(model='gpt-4o-mini')\n\nquestion = '年假有几天？'\ndocs = retriever.invoke(question)\ncontext = '\\n---\\n'.join(d.page_content for d in docs)\nanswer = llm.invoke(f'''仅根据以下资料回答，并标注来源序号。\n资料：\n{context}\n\n问题：{question}\n若资料不足请回答\"知识库中未找到\"。''')",
       "lang": "python"
     },
+    "related": [
+      "vector-database",
+      "chunking",
+      "embedding-model",
+      "rag-evaluation"
+    ],
+    "extended": "进阶方向：Advanced RAG 全链路（混合检索/重排/查询改写）、GraphRAG、Agentic RAG",
     "image": "images/rag.png"
   },
   {
     "id": "document-parsing",
     "category": "RAG 检索增强生成",
     "name": "文档解析",
+    "summary": "RAG 的第一道工序：把 PDF/Word/网页变成干净文本——源头不干净，后面全白搭。",
     "description": "RAG 链路的第一站：把 PDF、Word、Excel、HTML、扫描件等格式转换成干净的文本，是决定知识库质量的源头环节。难点包括：双栏排版读串行、表格结构被打散、图片中的文字（需 OCR）、页眉页脚噪声。原则是'解析质量 > 一切后续优化'，脏文本喂进去，后面全部白搭。",
+    "background": "文档解析是老领域（Apache TIK A、Tesseract OCR 都有二十年历史），但 RAG 给它提了新要求：不只要'读出字'，还要保留标题层级、表格结构、阅读顺序。2023 年后涌现一批面向 LLM 的新解析器：Unstructured、MinerU、Marker 等，多模态大模型（直接'看'PDF）也成为解析新路线。",
+    "problem": "解决'企业知识锁在复杂格式里'的问题：真实世界的文档是双栏排版、扫描件、带合并单元格表格的 PDF——朴素提取会得到乱序的文字流和被打散的表格。脏文本入库后，检索召回的是碎片噪声，生成自然答非所问。",
     "analogy": "做菜前的洗菜切菜：食材（原始文档）洗不干净、切得乱七八糟，后面厨艺再高（检索和模型再强）也做不出好菜。",
     "points": [
       "扫描版 PDF 必须走 OCR，纯文本提取工具会返回空内容",
       "表格最好转成 Markdown/HTML 保留行列关系，纯文本会破坏结构",
       "解析后要人工抽查 + 清洗：去页眉页脚、修复断行、过滤乱码"
     ],
+    "pitfalls": [
+      "只用 pdfplumber 一类文本提取器对付扫描件——读出来是空的或乱码，必须走 OCR",
+      "表格被拍平成一行字——'费用|金额|日期'变成'费用 金额 日期'，检索和生成都失真，表格要转 Markdown/HTML",
+      "不做清洗直接入库——页眉页脚、水印、目录噪声占了大半索引，检索全是垃圾命中"
+    ],
+    "applications": [
+      "企业知识库构建：批量解析制度 PDF、产品手册、会议纪要",
+      "发票/合同抽取：OCR + 结构化提取，喂给下游审批流",
+      "学术论文库：解析双栏论文和公式，供科研问答",
+      "多模态文档理解：图表里的数据用视觉模型提取成文字描述"
+    ],
     "example": {
       "scenario": "一份 50 页的产品手册 PDF：解析后每页页脚都带'第 x 页'、目录页混入正文、参数表变成一串断行数字。清洗后（去页脚、删目录、表格转 Markdown）检索准确率从 54% 提升到 81%。",
       "code": "import pypdf   # pip install pypdf\n\nreader = pypdf.PdfReader('手册.pdf')\npages = []\nfor i, page in enumerate(reader.pages):\n    text = page.extract_text() or ''\n    # 清洗：去掉页脚页码和过短的噪声页\n    lines = [l for l in text.splitlines()\n             if not l.strip().startswith('第') or '页' not in l[:6]]\n    text = '\\n'.join(lines)\n    if len(text) > 50:          # 过滤目录页/空白页\n        pages.append({'page': i + 1, 'text': text})\n\nprint(f'有效页数: {len(pages)}/{len(reader.pages)}')",
       "lang": "python"
     },
+    "related": [
+      "chunking",
+      "rag",
+      "rag-evaluation"
+    ],
+    "extended": "进阶方向：MinerU/Marker/Unstructured 对比、版面分析模型（LayoutLM）、多模态模型直接读页",
     "image": "images/document-parsing.png"
   },
   {
     "id": "chunking",
     "category": "RAG 检索增强生成",
     "name": "分块（Chunking）",
+    "summary": "把长文档切成大小合适、语义完整的片段——分块质量决定检索上限。",
     "description": "把长文档切成适合检索和引用的小片段。块太大：一个块混多个主题，向量语义被稀释、检索不准、还挤占上下文；块太小：信息碎片化，答案需要的上下文不完整。常见设置 256~1024 token，块间保留 10~20% 重叠。进阶策略：按标题/段落的结构化分块、父子块（检索用小块、引用给大块）、语义分块。",
+    "background": "分块的需求源于 embedding 模型的输入长度限制（通常 512 token）和检索粒度的权衡。早期固定长度硬切，2023 年后转向结构感知分块（按标题、段落、语义边界），LangChain/LlamaIndex 把 RecursiveCharacterTextSplitter 等策略做成了标准件。父子块（small-to-big）等进阶模式成为生产标配。",
+    "problem": "解决'长文档无法直接检索、粒度粗细两难'的问题：整篇入库则一个块混 20 个主题，向量语义被稀释成'平均语义'，什么都检索不准；切太碎则'答案的两半分在两个块里'，召回也不完整。分块在两者之间找平衡，并尽量沿语义边界切。",
     "analogy": "切蛋糕：块太大一口咬不下（上下文装不下），块太小尝不出层次（信息不完整）。而且要顺着蛋糕的结构切（按标题段落），不能横七竖八乱切。",
     "points": [
       "从 chunk_size=512、overlap=64 起步，用评测集调参",
       "永远优先按文档结构（标题/段落）分块，固定长度分块是下策",
       "每个 chunk 要带上元数据：来源文档、章节标题、页码，检索后可溯源"
     ],
+    "pitfalls": [
+      "无脑用默认 chunk_size=1000——制度文档和代码需要的粒度完全不同，必须按文档类型和评测调参",
+      "切块不带元数据——检索到片段却不知道来自哪份文档第几节，无法溯源也无法过滤",
+      "块间零重叠——'张三，男，1990 年'这类句子被拦腰切断后两半都检索不到"
+    ],
+    "applications": [
+      "知识库构建的标准工序：解析 → 分块（带元数据）→ 向量化 → 入库",
+      "代码库索引：按函数/类切块，保留签名和 docstring，代码问答的基础",
+      "FAQ 生成：每个 chunk 喂给 LLM 反推'这块能回答什么问题'，做 HyDE 式索引增强",
+      "父子块检索：子块（精确匹配）命中后返回父块（完整上下文）给模型"
+    ],
     "example": {
       "scenario": "《退款政策》文档按标题切块后，'7 天无理由退款'自成一块（含适用范围和流程），用户问退款时精准命中这一块；若按固定 200 字硬切，这条政策可能被拦腰切断，两半都检索不到。",
       "code": "from langchain_text_splitters import RecursiveCharacterTextSplitter\n\nsplitter = RecursiveCharacterTextSplitter(\n    chunk_size=512,          # 每块约512字符\n    chunk_overlap=64,        # 相邻块重叠64字符，防止语义被切断\n    separators=['\\n# ', '\\n## ', '\\n\\n', '\\n', '。'],  # 优先按标题/段落切\n)\nchunks = splitter.split_documents(docs)\nfor c in chunks[:2]:\n    print(c.metadata, '->', c.page_content[:40], '...')",
       "lang": "python"
     },
+    "related": [
+      "document-parsing",
+      "embedding-model",
+      "rag-evaluation"
+    ],
+    "extended": "进阶方向：语义分块（embedding 相邻句相似度断点）、Late Chunking、RAPTOR 层级摘要索引",
     "image": "images/chunking.png"
   },
   {
     "id": "embedding-model",
     "category": "RAG 检索增强生成",
     "name": "Embedding 模型",
+    "summary": "决定'什么算相关'的翻译官：同样的文档，换个 embedding 模型检索效果天差地别。",
     "description": "把文本块转成向量的模型，是 RAG 检索质量的半壁江山（另一半是分块）。选择维度：中文能力、最大输入长度、向量维度（影响存储）、推理速度、是否开源可私有化。常用：OpenAI text-embedding-3 系列（闭源 API）、BAAI bge 系列（开源可私有化）、Jina embedding。换 embedding 模型=全库向量重算，成本要提前评估。",
+    "background": "2019 年 Sentence-BERT 开创句向量实用化；2022-2023 年中文 C-MTEB 榜单竞争白热化，BAAI 的 bge 系列成为开源中文事实标准；OpenAI 的 text-embedding-3 系列把商用 API 质量拉齐。2024 年 bge-m3 支持多语言+长文本（8192 token）+三种检索模式（稠密/稀疏/多向量），成为一句话接入的通用选择。",
+    "problem": "解决'检索器不理解领域语义'的问题：通用 embedding 模型分不清'诉讼时效'和'追诉期限'是一回事，也分不清'苹果公司'和'苹果水果'不是一回事。选对（或微调）embedding 模型，直接决定检索器能不能'听懂人话'。",
     "analogy": "翻译官的质量：同一个问题，差的翻译官把'退货'翻成了' retreat'，自然查不到退货政策。embedding 模型就是那个把人类语言翻译成'向量语言'的翻译官。",
     "points": [
       "中文场景优先看 C-MTEB 榜单，bge 系列是开源首选",
       "模型最大输入长度必须 ≥ chunk_size，否则文本被截断丢语义",
       "入库和查询必须用同一个模型（含同版本），升级模型要全量重建索引"
     ],
+    "pitfalls": [
+      "上线后换 embedding 模型不重建索引——新模型算的向量和旧索引根本不在一个空间，结果完全错乱",
+      "只看榜单总分——要用自己的领域评测集测，通用榜第一不代表你的法律文书场景最强",
+      "忽略最大输入长度——模型上限 512 token 而 chunk 有 1000，后半段被静默截断"
+    ],
+    "applications": [
+      "中文知识库：bge-large-zh / bge-m3 开源可私有化，是企业合规首选",
+      "多语言知识库：多语种文档统一检索（跨国客服、出海产品）",
+      "领域微调：医疗/法律语料上微调 embedding，召回率再提 10~20%",
+      "图像/文本统一检索：CLIP 类模型支撑'以文搜图'电商场景"
+    ],
     "example": {
       "scenario": "某法律知识库用通用英文 embedding 模型，'诉讼时效'检索不出'追诉期限'相关条款；换成 bge-large-zh 后，这两个同义表述的向量相似度从 0.4 提升到 0.86，召回率提升 30%。",
       "code": "from sentence_transformers import SentenceTransformer\n\n# 开源可私有化：bge 系列（中文强）\nmodel = SentenceTransformer('BAAI/bge-large-zh-v1.5')   # 1024维\nchunks = ['诉讼时效为三年。', '追诉期限是多久？']\nvecs = model.encode(chunks, normalize_embeddings=True)\n\n# 归一化后点积即余弦相似度\nprint((vecs[0] * vecs[1]).sum())   # 同义句相似度应 > 0.8\n\n# 注意：encode 的输入长度不要超过模型上限(此模型512token)",
       "lang": "python"
     },
+    "related": [
+      "embedding",
+      "chunking",
+      "vector-database"
+    ],
+    "extended": "进阶方向：C-MTEB/MTEB 榜单、embedding 微调（对比学习正负样本构造）、bge-m3 的三模式混合检索",
     "image": "images/embedding-model.png"
   },
   {
     "id": "vector-database",
     "category": "RAG 检索增强生成",
     "name": "向量数据库",
+    "summary": "海量向量里毫秒级找'最相似的 k 个'的专用数据库——RAG 的存储引擎。",
     "description": "专门存储向量并支持相似度检索的数据库，核心能力是在百万到亿级向量中毫秒级找出 Top-k 最近邻。主流选择：Chroma（轻量嵌入式，原型首选）、FAISS（Meta 的向量检索库，非完整数据库）、Milvus（分布式，生产级）、pgvector（PostgreSQL 插件，业务数据同库）。选型原则：原型用 Chroma，已有 PG 且规模不大用 pgvector，海量高并发用 Milvus。",
+    "background": "向量检索库 FAISS 2017 年开源（Meta），但它是库不是数据库（无持久化管理）。2021 年起 Milvus、Weaviate、Qdrant、Pinecone 等专用向量数据库涌现；2021 年 pgvector 发布让 PostgreSQL 玩家'顺手'获得向量能力。2023 年 RAG 爆发把整个赛道推上风口，2024 年后市场理性回归：多数中小场景 pgvector/Chroma 就够，不必上重型方案。",
+    "problem": "解决'百万级向量暴力扫描要几秒钟'的问题：余弦相似度暴力算全库在亿级向量上不可用。向量数据库用 ANN 索引（HNSW 等）把查询压到毫秒级，同时提供元数据过滤、持久化、多租户等数据库应有能力。",
     "analogy": "图书馆的智能检索台：不用一排排书架翻（暴力扫描），报出书的内容特征就能秒级定位最相关的几本。藏书少时一个书单（NumPy 数组）就够，藏书百万才需要专业检索系统。",
     "points": [
       "除了向量本身，还要存元数据（来源/时间/权限）并支持元数据过滤",
       "评估指标：召回率、查询延迟 QPS、是否支持增量更新和持久化",
       "小规模（<10万块）用 NumPy 暴力算余弦也完全可行，别过度设计"
     ],
+    "pitfalls": [
+      "一上来就上 Milvus 集群——运维成本巨大，5 万条文档用 NumPy 都够，先评估规模再选型",
+      "只存向量不存元数据——没法按部门/时间/权限过滤，检索结果张冠李戴",
+      "忽视索引构建参数——默认参数召回率可能只有 80%，关键场景必须调优并实测 recall@k"
+    ],
+    "applications": [
+      "原型/中小规模（<100万块）：Chroma 或 pgvector，一个进程/一个库搞定",
+      "生产级 PG 用户：pgvector 同库同事务，权限过滤和业务数据天然打通",
+      "海量高并发（亿级向量、多租户）：Milvus/Qdrant 集群",
+      "非 RAG 场景：以图搜图、音频指纹、相似商品推荐"
+    ],
     "example": {
       "scenario": "客服知识库 5 万条 FAQ 用 Chroma 单机跑，查询延迟 3ms；业务扩展到 3000 万条产品文档后迁移到 Milvus 集群，并按部门字段做权限过滤——普通员工检索不到标了'管理层可见'的薪酬文档。",
       "code": "import chromadb\n\nclient = chromadb.PersistentClient(path='./kb_db')\ncol = client.get_or_create_collection('docs')\n\n# 入库（向量可由 col 自动调用默认 embedding 模型）\ncol.add(\n    ids=['doc_1', 'doc_2'],\n    documents=['年假规定：入职满1年5天…', '报销流程：发票需在30天内…'],\n    metadatas=[{'source': '员工手册', 'acl': 'all'},\n               {'source': '财务制度', 'acl': 'all'}]\n)\n\n# 检索：相似度 + 元数据过滤\nres = col.query(query_texts=['请假'], n_results=2,\n                where={'acl': 'all'})\nprint(res['documents'][0])",
       "lang": "python"
     },
+    "related": [
+      "ann",
+      "embedding-model",
+      "postgresql"
+    ],
+    "extended": "进阶方向：HNSW/IVF 参数调优、混合标量+向量过滤、向量库选型决策树",
     "image": "images/vector-database.png"
   },
   {
     "id": "ann",
     "category": "RAG 检索增强生成",
     "name": "近似最近邻（ANN）",
+    "summary": "近似最近邻：放弃 100% 精确，换取千倍速度——大规模检索的可行性基石。",
     "description": "Approximate Nearest Neighbor，向量检索的核心算法思想：在海量向量中不追求 100% 找到真正的最近邻，而是以极小的召回损失换取百倍千倍的速度提升。主流索引：HNSW（跳表式图索引，查询快内存高）、IVF（先聚类再在桶内搜索）、PQ（乘积量化压缩向量省内存）。向量数据库底层就是这些索引的封装。",
+    "background": "ANN 算法研究有 30 年历史：KD-tree（低维时代）→ LSH → 2016 年 HNSW（分层可导航小世界图）成为高维向量的事实标准；同期 IVF+PQ（倒排+量化压缩）在内存受限场景流行。工程共识：10 亿级向量、recall@10 ≥0.95 的要求下，HNSW 是默认起点。",
+    "problem": "解决'精确检索在大规模下不可用'的问题：1 亿条 768 维向量暴力扫一次要 3 秒，业务上等于不可用。ANN 用图索引把搜索范围缩小到'附近的一小片'，3 毫秒返回且 98% 的结果和精确检索一致——用户完全无感的精度换来了三个数量级的速度。",
     "analogy": "找最像你的人：不去全市逐个面对面比对（精确搜索），而是先按行政区（聚类）再按小区（图索引）缩小范围，找到'差不多最像'的几个人——快 1000 倍，漏掉真命天子的概率不到 1%。",
     "points": [
       "评估 ANN 用 recall@k：ANN 结果与精确搜索结果的重合比例",
       "HNSW 是当前默认首选：查询快、召回高，代价是内存占用大",
       "索引参数（如 HNSW 的 ef_search）是速度和召回的调节旋钮"
     ],
+    "pitfalls": [
+      "只看延迟不看召回率——索引参数太激进，该找到的文档 30% 概率漏掉，RAG 效果莫名变差",
+      "索引建成从不调参——HNSW 的 ef_search 是速度/召回旋钮，必须按业务实测校准",
+      "小数据也建索引——几千条向量直接暴力算，精确又省心，别过度设计"
+    ],
+    "applications": [
+      "RAG 检索底座：所有向量数据库的内部引擎（Chroma/pgvector/Milvus 都封装了 HNSW）",
+      "推荐系统召回层：从亿级商品里毫秒级召回候选集",
+      "人脸检索/身份核验：亿级人脸库的实时比对",
+      "去重系统：全网新闻/商品指纹的近似查重"
+    ],
     "example": {
       "scenario": "1 亿条向量暴力精确检索一次要 3 秒，业务完全不可用。换 HNSW 索引后 3ms 返回，recall@10 = 0.98（前 10 名中有 9.8 个与精确搜索重合）——用户完全感知不到那 2% 的损失。",
       "code": "import faiss   # pip install faiss-cpu\nimport numpy as np\n\nd = 768                                     # 向量维度\nxb = np.random.rand(1_000_000, d).astype('float32')\nfaiss.normalize_L2(xb)\n\n# HNSW 索引：M=每个点的连接数, efConstruction=建图时候选队列\nindex = faiss.IndexHNSWFlat(d, M=32)\nindex.hnsw.efConstruction = 200\nindex.add(xb)\n\nindex.hnsw.efSearch = 64                    # 查询时精度/速度旋钮\nxq = np.random.rand(1, d).astype('float32')\nfaiss.normalize_L2(xq)\nD, I = index.search(xq, k=5)                # 毫秒级返回Top-5\nprint('最相似的5个向量下标:', I[0])",
       "lang": "python"
     },
+    "related": [
+      "vector-database",
+      "cosine-similarity",
+      "rag"
+    ],
+    "extended": "进阶方向：HNSW 原论文、DiskANN（磁盘级向量检索）、量化压缩（PQ/SQ）的精度损失评估",
     "image": "images/ann.png"
   },
   {
     "id": "hybrid-search",
     "category": "RAG 检索增强生成",
     "name": "混合检索（Hybrid Search）",
+    "summary": "语义检索 + 关键词检索双管齐下——'意思相近'和'一字不差'都能命中。",
     "description": "把向量检索（语义相似）和关键词检索（BM25 等精确匹配）的结果融合使用。向量检索擅长'换了说法也能找到'（同义词、口语化），但对产品型号、人名、错误码等精确 token 无能为力；BM25 恰好相反。两者互补，用 RRF（倒数排序融合）或加权分数合并结果，能显著提升召回率，是生产级 RAG 的标配。",
+    "background": "BM25 关键词检索是 1994 年诞生的经典算法，至今仍是搜索引擎的基线。纯向量检索兴起后，人们发现它在型号、错误码、人名这类'必须一字不差'的查询上翻车（embedding 会把 ERROR_4021 切碎）。2023 年起混合检索成为生产级 RAG 标配，RRF（倒数排序融合）因为简单稳健成为融合算法默认选择。",
+    "problem": "解决'单路检索各有盲区'的问题：向量检索能容忍换说法（'退款'≈'退货'）但对精确 token 无能为力；BM25 精确匹配强但完全不理解同义改写。双路并行取长补短，召回率普遍提升 10~20%。",
     "analogy": "找一个人：向量检索像'特征拼图'（高个子、戴眼镜的人都能找到），关键词检索像'身份证号'（报 ERROR_4021 这种编号必须一字不差）。两条路都走，谁先找到算谁的。",
     "points": [
       "必须上混合检索的信号：知识库里大量出现型号、代码、专有名词",
       "RRF 融合公式简单稳健：score = Σ 1/(k + rank)，k 通常取 60",
       "混合检索后接一个 Rerank 重排，效果通常再上一层楼"
     ],
+    "pitfalls": [
+      "两路分数直接相加——BM25 分数无上界而余弦在 0~1，量纲不统一会压倒另一路，用 RRF 按排名融合",
+      "以为混合检索能替代重排——融合只解决'别漏'，排序精度还得靠 Cross-Encoder",
+      "中文分词不处理就上 BM25——中文按字切分会稀释关键词权重，要用支持中文分词的引擎"
+    ],
+    "applications": [
+      "技术文档/工单检索：错误码、API 名必须精确命中（BM25 主攻），描述性查询走语义（向量主攻）",
+      "电商搜索：'苹果手机'（语义）和'iPhone16-PRO'（型号精确）两类查询通吃",
+      "法律/医疗检索：条文编号精确匹配 + 医学同义词语义匹配",
+      "企业知识库：默认配置直接上混合检索，几乎没有代价（多一路检索的开销）"
+    ],
     "example": {
       "scenario": "用户搜'ERROR_4021 怎么解决'：向量检索把'4021'切碎了召回了一堆无关错误码文档；BM25 精确命中含 ERROR_4021 的报错手册。RRF 融合后，正确文档排第一。",
       "code": "def rrf_fuse(list_a, list_b, k=60, top_n=5):\n    '''list_a/list_b: 两路检索返回的doc_id按序排列'''\n    scores = {}\n    for rank, doc_id in enumerate(list_a):\n        scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)\n    for rank, doc_id in enumerate(list_b):\n        scores[doc_id] = scores.get(doc_id, 0) + 1 / (k + rank + 1)\n    return sorted(scores, key=scores.get, reverse=True)[:top_n]\n\nvec_hits  = ['d3', 'd7', 'd12', 'd5']   # 向量检索结果\nbm25_hits = ['d7', 'd3', 'd44', 'd9']   # 关键词检索结果\nprint(rrf_fuse(vec_hits, bm25_hits))    # -> 两路都认可的 d3, d7 靠前",
       "lang": "python"
     },
+    "related": [
+      "rerank",
+      "ann",
+      "rag-evaluation"
+    ],
+    "extended": "进阶方向：RRF 公式与调参、Learned Sparse Retrieval（SPLADE）、Elasticsearch/OpenSearch 的混合检索实践",
     "image": "images/hybrid-search.png"
   },
   {
     "id": "rerank",
     "category": "RAG 检索增强生成",
     "name": "重排（Rerank）",
+    "summary": "精排官：粗召回 50 条后，用 Cross-Encoder 逐条精读挑出最相关的 5 条。",
     "description": "在初检（向量/关键词召回 Top-50）之后，用 Cross-Encoder 模型把'问题-文档对'逐个精读打分，重新排序后只把 Top-3~5 喂给 LLM。Bi-Encoder（embedding 检索）把问题和文档各自独立编码，快但粗；Cross-Encoder 把问题和文档拼在一起进模型深度交互，准但慢——所以只能用于小候选集精排。这是'召回求全、精排求准'的经典两段式架构。",
+    "background": "两段式检索（召回+精排）是搜索推荐领域十几年的经典架构。LLM 时代它换了新装：bi-encoder（向量召回）快但粗，cross-encoder（问题-文档拼接后深度交互）准但慢，天然适合分工。Cohere Rerank API 商用化后，开源 bge-reranker 系列让私有化部署零门槛，2023 年起成为 RAG 进阶优化性价比最高的一步。",
+    "problem": "解决'真答案召回了但排在 23 名，模型根本看不到'的问题：向量召回保'别漏'，但排序粗糙；LLM 上下文只放得下 3~5 条。重排把真答案从第 23 名提到第 1 名，等于在'喂给模型的有限名额'里塞进最相关的内容。",
     "analogy": "招聘：先按简历关键词海选 50 份（初检，快），再让面试官逐份精读面试 5 个人（重排，准）——面试官不可能面 5000 人，所以必须先粗筛。",
     "points": [
       "常用模型：bge-reranker-v2-m3（开源）、Cohere Rerank（API）",
       "典型配置：向量召回 Top-50 → Rerank 取 Top-5 进 prompt",
       "Rerank 带来的是精度，不能修复召回阶段根本没捞到的问题"
     ],
+    "pitfalls": [
+      "对全部百万文档直接 rerank——Cross-Encoder 是逐对推理，性能上只允许处理几十条，必须先粗召回",
+      "以为重排能救召回——召回阶段根本没捞到的文档，重排永远无能为力，先修召回再谈精排",
+      "忽视 rerank 模型的语言匹配——英文 reranker 处理中文效果差，选多语种模型（bge-reranker-v2-m3）"
+    ],
+    "applications": [
+      "生产 RAG 标配：向量/混合召回 Top-50 → Rerank → Top-5 进 prompt",
+      "搜索产品精排：粗排万条 → 精排百条 → 业务规则重排十条",
+      "问答对匹配：客服系统判断'用户问题和库里哪个 FAQ 最像'",
+      "低质文档过滤：重排分数低于阈值的候选直接丢弃，减少噪声"
+    ],
     "example": {
       "scenario": "问'试用期辞退有补偿吗'，向量召回的 50 条里真答案排第 23 位（LLM 根本看不到）。加 Rerank 后真答案跳到第 1 位进入上下文，回答准确且带引用。",
       "code": "from sentence_transformers import CrossEncoder\n\nreranker = CrossEncoder('BAAI/bge-reranker-v2-m3')\nquery = '试用期辞退有补偿吗'\ncandidates = [f'文档{i}' for i in range(50)]   # 初检召回的Top50\n\npairs = [(query, c) for c in candidates]\nscores = reranker.predict(pairs)               # 逐对精读打分\nranked = sorted(zip(candidates, scores),\n                key=lambda x: x[1], reverse=True)\ntop5 = [c for c, s in ranked[:5]]              # 精排后的Top5给LLM",
       "lang": "python"
     },
+    "related": [
+      "hybrid-search",
+      "ann",
+      "context-compression"
+    ],
+    "extended": "进阶方向：bge-reranker/Cohere Rerank 对比、ColBERT 多向量交互、rerank 分数阈值校准",
     "image": "images/rerank.png"
   },
   {
     "id": "query-rewrite",
     "category": "RAG 检索增强生成",
     "name": "查询改写（Query Rewrite）",
+    "summary": "把'那玩意儿咋退'翻译成'退款流程'——用户问题与检索器之间的翻译官。",
     "description": "在检索前用 LLM 把用户的原始问题改写成更适合检索的形式。常见场景：口语化转规范化（'那玩意儿咋退'→'退款流程'）、指代消解（多轮对话中'它多少钱'→'iPhone 16 多少钱'）、一问拆多查（复合问题拆成多个子查询分别检索）。用户的问题天然是为'人'设计的，不一定适合喂给检索器。",
+    "background": "查询改写是搜索引擎的老技术（拼写纠错、同义词扩展都是它）。RAG 场景给它加了新任务：多轮对话中的指代消解（'它多少钱'里的'它'必须还原）。2023 年后随多轮 RAG 产品兴起成为标配组件，实现上从规则方法进化到用小 LLM 实时改写。",
+    "problem": "解决'用户问题和文档措辞对不上'的问题：用户随口说'那玩意儿'、'上次那个'，检索器按字面匹配只能摇头。改写环节把口语、省略、指代还原成完整规范的查询，同时可把复合问题拆成多个子查询并行检索。",
     "analogy": "翻译客户的需求给采购员：客户说'上次那个再给我来一打'，聪明的助理会先翻译成'A4 打印纸 70g 全包 500 张 × 10 包'再去下单。",
     "points": [
       "多轮对话必须做指代消解，否则'它''那个'检索不到任何东西",
       "改写会增加一次 LLM 调用延迟，简单场景可用规则替代",
       "改写后保留原始问题一起检索（多路查询），避免改写丢信息"
     ],
+    "pitfalls": [
+      "改写丢信息——改写器'自由发挥'加了原文没有的限定条件，检索方向跑偏，prompt 要限定'只消歧不扩展'",
+      "多轮改写不带上文——脱离对话历史的改写无从消解'它'是谁",
+      "每轮都改写简单问题——'年假几天'这种明确问题直接检索，改写纯属浪费一次 LLM 调用"
+    ],
+    "applications": [
+      "多轮对话 RAG：每轮把问题结合历史改写成独立完整查询，'它'有明确所指",
+      "口语化场景：语音输入、方言表达规范化后再检索",
+      "复杂问题拆解：'对比 A 和 B 的价格和售后'拆成多个子查询，分别检索后融合",
+      "跨语言检索：中文问题改写/翻译成英文查英文知识库"
+    ],
     "example": {
       "scenario": "多轮对话：用户先问'RAG 是什么'，接着问'它和微调比哪个便宜？'——'它'必须改写成'RAG'才能检索。改写器输出：'RAG 和微调相比哪个成本更低？'",
       "code": "rewrite_prompt = '''根据对话历史，把用户最后一个问题改写成\n独立完整、无指代词的检索查询。只输出改写后的问题。\n\n对话历史：\nuser: RAG是什么？\nassistant: RAG是检索增强生成……\nuser: 它和微调比哪个便宜？\n\n改写结果：RAG和微调两种方案的成本对比'''\n\n# 生产中还可以让模型输出多个改写版本，多路检索后RRF融合",
       "lang": "python"
     },
+    "related": [
+      "hyde",
+      "hybrid-search",
+      "multi-agent"
+    ],
+    "extended": "进阶方向：多查询生成（multi-query）+ RRF 融合、HyDE 与改写的组合拳、改写效果评测方法",
     "image": "images/query-rewrite.png"
   },
   {
     "id": "hyde",
     "category": "RAG 检索增强生成",
     "name": "HyDE（假设文档嵌入）",
+    "summary": "先让模型编一份'假答案'，再用假答案的向量去找真文档——以形找形，反直觉但有效。",
     "description": "Hypothetical Document Embeddings：先让 LLM 凭空写一份'假设答案'（哪怕内容是错的），再用这份假设文档的向量去检索真实文档。原理是'答案与答案在向量空间更相近'——问题和答案的 embedding 往往有距离差，而编造的答案虽然事实错误，其'形态'和真实答案高度一致，所以检索反而更准。",
+    "background": "2022 年论文《Precise Zero-Shot Dense Retrieval without Relevance Labels》（HyDE）提出。核心洞察来自 embedding 空间的几何性质：问题和答案虽然语义相关，但向量距离并不近（一个是疑问形态、一个是陈述形态）；而编造的答案虽然事实错误，'形态'与真答案高度一致，用它的向量检索反而更准。论文在多个数据集上验证了零标注场景下超过常规检索。",
+    "problem": "解决'问题向量与答案向量形态错位'的问题：'年假有几天？'是疑问句形态，文档里是'员工年假标准为…'的陈述形态，直接向量匹配有天然鸿沟。假设文档充当'形态桥梁'，让检索在'陈述对陈述'的空间里进行。",
     "analogy": "猜答案找原文：先按自己的理解写一份'大概是这样的答案'，虽然细节可能全错，但用这份草稿去书堆里翻，更容易翻到真正讲这个格式的章节——因为格式对了。",
     "points": [
       "适合'问题短、答案长且形态固定'的语料，如 FAQ、制度条文",
       "多一次 LLM 生成，延迟和成本增加，精细场景才值得开",
       "假设文档的事实错误不影响检索——它只提供'形状'不提供'事实'"
     ],
+    "pitfalls": [
+      "担心假设答案'编错了怎么办'——它的错误事实不影响检索正确性，但初次使用者常被这个反直觉设计劝退",
+      "所有场景无脑上——每次多一次 LLM 生成（几百 ms 延迟），简单明确的查询收益趋近于零",
+      "假设文档生成长度失控——生成 2000 字假答案再检索，噪声盖过信号，要限制生成长度"
+    ],
+    "applications": [
+      "制度/FAQ 类知识库：答案形态固定（条款式陈述），HyDE 提升尤其明显",
+      "零标注冷启动：没有标注数据调优检索时，HyDE 是免费的精度增强",
+      "短查询长文档场景：'报销'两个字检索不出细节，假答案能把检索面撑开",
+      "与查询改写叠加：先改写消歧，再 HyDE 生成假设文档，双保险"
+    ],
     "example": {
       "scenario": "用户问'出差住宿补贴标准'。假设答案：'员工出差住宿补贴为一线城市每晚400元，二线城市300元…'（数字是编的）。用这段假设文本检索，精确命中《差旅管理制度》第 8 条的真实标准。",
       "code": "def hyde_search(question):\n    # 第1步：生成假设文档（允许它编）\n    hypothetical = llm(\n        f'请直接写一段可能回答该问题的标准文档段落，不必准确：\\n{question}')\n    # 第2步：用假设文档(而非原问题)去检索\n    docs = vectorstore.similarity_search(hypothetical, k=3)\n    # 第3步：真实文档 + 原问题 交给LLM生成准确答案\n    return llm(f'根据资料回答：\\n{docs}\\n问题：{question}')",
       "lang": "python"
     },
+    "related": [
+      "query-rewrite",
+      "embedding",
+      "rag"
+    ],
+    "extended": "进阶方向：HyDE 原论文、多假设文档取平均、假设文档与真实文档混合打分",
     "image": "images/hyde.png"
   },
   {
     "id": "context-compression",
     "category": "RAG 检索增强生成",
     "name": "上下文压缩",
+    "summary": "检索回来的内容先'挤水分'再喂模型——每一句 token 都要花在刀刃上。",
     "description": "检索到的文档块并非句句相关，直接全部塞进 prompt 会浪费 token、引入噪声干扰模型。上下文压缩指在送入 LLM 前对检索结果做精简：句子级相关性过滤（只留与问题相关的句子）、抽取关键片段、多块去重合并。LangChain 的 ContextualCompressionRetriever 是现成实现。目标是'喂给模型的每一句都有用'。",
+    "background": "上下文压缩思想随'长 prompt 的噪声伤害'研究而普及：模型面对塞满无关内容的上下文，回答质量明显下降（'lost in the middle' 的近亲现象）。LangChain 的 ContextualCompressionRetriever（2023）把句子级过滤做成标准组件；长上下文模型普及后，压缩的价值从'塞得下'转向'抗噪声+省成本'。",
+    "problem": "解决'检索结果冗长且掺杂噪声'的问题：5 个 chunk 共 1500 token，真正相关的只有 6 句话。全量塞入，噪声干扰模型判断（引用错段落）、成本翻倍；压缩后只留精华，模型注意力集中在真正的证据上。",
     "analogy": "给领导汇报前整理资料：检索来的 50 页材料里圈出 3 段真正相关的内容再递上去，而不是整摞拍在桌上让领导自己找。",
     "points": [
       "压缩越狠 token 越省，但要防过度压缩丢失关键限定条件",
       "最简单的压缩：把每个 chunk 的首句 + 与查询重合度高的句子留下",
       "长上下文模型普及后，压缩的价值从'塞得下'转向'抗噪声干扰'"
     ],
+    "pitfalls": [
+      "压缩过度丢了限定条件——'除试用期员工外'这类关键限定词被当噪声过滤，答案方向反转",
+      "每 token 都用 LLM 压缩——成本和延迟叠加，简单场景用 embedding 相似度选句就够",
+      "压缩后不保留出处——引用溯源链断了，答案无法验证"
+    ],
+    "applications": [
+      "RAG 精排后的最后一步：rerank Top-5 → 逐块句子过滤 → 只留相关句",
+      "长文档摘要预处理：先抽取与任务相关的段落再总结，比全文总结更准",
+      "Agent 工具结果裁剪：网页抓取、API 返回的大 JSON 提取关键字段再入上下文",
+      "多文档对比：从每份文档只抽相关段落，在有限窗口里对比更多文档"
+    ],
     "example": {
       "scenario": "检索到 3 个 chunk 共 1500 token，其中真正相关的只有 6 句话（320 token）。句子级过滤后 prompt 从 1800 token 降到 620 token，答案更干净（少了干扰），成本降 65%。",
       "code": "from langchain.retrievers import ContextualCompressionRetriever\nfrom langchain.retrievers.document_compressors import \\\n    LLMChainExtractor\n\n# 用 LLM 从每个文档块中只抽取与问题相关的句子\ncompressor = LLMChainExtractor.from_llm(llm)\ncompression_retriever = ContextualCompressionRetriever(\n    base_compressor=compressor,\n    base_retriever=vectorstore.as_retriever(search_kwargs={'k': 5})\n)\n\ncompressed = compression_retriever.invoke('年假有几天？')\n# 返回的每个文档只剩相关句子，token 大幅减少",
       "lang": "python"
     },
+    "related": [
+      "rerank",
+      "context-window",
+      "rag-evaluation"
+    ],
+    "extended": "进阶方向：LLMLingua（token 级压缩）、句子级 vs 文档级压缩的取舍、压缩率-忠实度的平衡评测",
     "image": "images/context-compression.png"
   },
   {
     "id": "rag-evaluation",
     "category": "RAG 检索增强生成",
     "name": "RAG 评估",
+    "summary": "用数据代替感觉：忠实度、相关性、召回率四个指标，把 RAG 调优变成科学实验。",
     "description": "用系统化指标衡量 RAG 效果，替代'感觉变好了'的主观判断。RAGAS 框架的核心指标：忠实度（答案是否忠于检索资料，衡量幻觉）、答案相关性（是否答到点上）、上下文精确率（检索结果里噪声多不多）、上下文召回率（该找到的资料找到了没）。检索和生成分别评估，才能定位瓶颈在召回还是在生成。",
+    "background": "RAG 早期调优全靠'感觉变好了'，2023 年 RAGAS 框架（Evaluation of RAG Systems）提出四指标体系后局面改变：把检索质量和生成质量分开度量，能精确定位瓶颈在召回还是生成。同期 TruLens、DeepEval 等框架跟进，'LLM as judge'的自动评分方法让大规模评测的成本降到可接受。",
+    "problem": "解决'RAG 改动效果无法度量'的问题：换了 embedding 模型、调了 chunk size、加了重排——每一改动是好是坏？没有评测集就只能靠感觉和运气。四指标体系让每次改动都有前后对比，优化从玄学变工程。",
     "analogy": "医生看化验单而不是凭气色：'患者感觉好点了'不算数，白细胞数、血压值（忠实度/召回率）才是判断依据，还能定位病灶在检索端还是生成端。",
     "points": [
       "先建 30~100 条带标准答案的评测集，这是调优一切的前提",
       "检索指标差 → 优化分块/embedding/混合检索；忠实度差 → 优化 prompt/换模型",
       "每次改动（换 embedding、调 chunk_size）都跑一遍评测集做回归对比"
     ],
+    "pitfalls": [
+      "没有标准答案就开始'评测'——答案相关性这类指标必须对照 ground truth，评测集先行",
+      "用 LLM 评分完全不校准——judge 模型自己的偏差会系统性误导，要抽样人工对齐",
+      "只评不归因——四个指标是一个诊断面板，重点在于'哪个指标差决定改哪里'，而不是看总分"
+    ],
+    "applications": [
+      "上线前基线：30~100 条带标准答案的真实问题建评测集，跑出基线分数",
+      "每次改动回归：换模型/调参数/改 prompt 前后各跑一遍，数据说话",
+      "故障定位：召回率低 → 修检索侧；忠实度低 → 修生成侧 prompt",
+      "持续监控：线上抽样评分，效果劣化（文档更新导致）自动告警"
+    ],
     "example": {
       "scenario": "评测发现：上下文召回率 0.85（检索还行）但忠实度只有 0.6——瓶颈在生成端，模型爱自由发挥。对症下药：prompt 里强化'仅根据资料回答'，忠实度升到 0.88，检索端一行代码没改。",
       "code": "from ragas import evaluate   # pip install ragas\nfrom ragas.metrics import (faithfulness, answer_relevancy,\n    context_precision, context_recall)\nfrom datasets import Dataset\n\n# 评测集：question + 生成答案 + 检索上下文 + 标准答案\nds = Dataset.from_dict({\n    'question': ['年假有几天？'],\n    'answer': ['入职满1年可享5天年假[1]'],\n    'contexts': [['第12条：年假标准…']],\n    'ground_truth': ['入职满1年5天，满10年10天'],\n})\n\nreport = evaluate(ds, metrics=[faithfulness, answer_relevancy,\n                               context_precision, context_recall])\nprint(report)   # 每项0~1，越接近1越好",
       "lang": "python"
     },
+    "related": [
+      "rag",
+      "hallucination",
+      "evaluation-metrics"
+    ],
+    "extended": "进阶方向：RAGAS/TruLens/DeepEval 实操、评测集构建方法论、线上 A/B 与离线指标的相关性校准",
     "image": "images/rag-evaluation.png"
   },
   {
     "id": "langchain",
     "category": "开发框架与工具",
     "name": "LangChain",
+    "summary": "LLM 应用开发的'乐高积木箱'：模型、检索、工具、链全部预制好，拼装即应用。",
     "description": "最流行的 LLM 应用开发框架，把模型调用、prompt 模板、输出解析、RAG 组件、Agent 循环等封装成可组合的模块。核心抽象：Model（模型 I/O）、Retriever（检索器）、Tool（工具）、Chain（链式组合）。优点是生态全、组件多、上手快；缺点是抽象层多、调试要看源码。适合快速原型和标准 RAG/Agent 应用。",
+    "background": "2022 年 10 月 Harrison Chase 开源 LangChain，恰逢 ChatGPT 引爆前夜，靠'LLM 应用脚手架'定位病毒式增长，成为 GitHub 增长最快的项目之一。它定义了 Model I/O、Retrieval、Agents、Memory 等影响整个行业的抽象词汇。争议也一直存在：抽象层过多、版本迭代剧烈、'胶水层'被新模型能力（原生结构化输出）部分取代。2024 年团队重心转向 LangGraph。",
+    "problem": "解决'每个 LLM 应用都从零造轮子'的问题：调模型、管理 prompt 模板、接向量库、写 Agent 循环、做流式输出——这些通用件没必要每家重写。LangChain 把它们标准化，让开发者专注业务差异部分，且换模型供应商时改动极小。",
     "analogy": "乐高积木盒：模型、检索器、工具都是预制积木块，按说明书（LCEL 管道）拼起来就是一个应用。想造 unusual 的结构时，反而要自己削木头（直接调 API）。",
     "points": [
       "学它的重点不是背 API，而是理解 Model I/O / Retrieval / Agents 几大抽象",
       "LCEL 管道（| 符号）是组装组件的统一语法",
       "复杂有环工作流用它的兄弟项目 LangGraph，而不是硬写 Chain"
     ],
+    "pitfalls": [
+      "把 LangChain 当黑盒硬调——抽象层出的 bug 要读源码才能定位，简单场景直接用官方 SDK 更稳",
+      "版本升级不看变更日志——0.1→0.2→0.3 大改过包结构和导入路径，生产环境锁版本",
+      "所有场景都套框架——一个 OpenAI 调用 + 一个 JSON 解析就能干的活，引入框架反而添乱"
+    ],
+    "applications": [
+      "标准 RAG 问答：文档加载→分块→入库→检索→生成的全链路组件开箱即用",
+      "快速原型：周末验证一个 AI 应用想法，LCEL 十几行串起来",
+      "企业内部工具：接 OpenAI/DeepSeek/本地模型统一封装，底层自由切换",
+      "学习框架：它的抽象词汇（Chain/Retriever/Tool）已成为行业通用语"
+    ],
     "example": {
       "scenario": "三行核心代码搭一个'检索 + 生成'的 RAG 链：检索器 | 提示模板 | 模型 | 输出解析器，四块积木用管道串起来就能跑。",
       "code": "from langchain_core.prompts import ChatPromptTemplate\nfrom langchain_core.output_parsers import StrOutputParser\nfrom langchain_openai import ChatOpenAI\n\nprompt = ChatPromptTemplate.from_template(\n    '仅根据以下资料回答问题。\\n资料：{context}\\n问题：{question}')\nllm = ChatOpenAI(model='gpt-4o-mini')\n\n# LCEL 管道：检索结果 -> 填充模板 -> 调模型 -> 解析成字符串\nchain = (lambda x: {'context': retriever.invoke(x['question']),\n                    'question': x['question']}) \\\n        | prompt | llm | StrOutputParser()\n\nprint(chain.invoke({'question': '年假有几天？'}))",
       "lang": "python"
     },
+    "related": [
+      "lcel",
+      "langgraph",
+      "rag"
+    ],
+    "extended": "进阶方向：LCEL 深入、LangSmith 可观测平台、与 LlamaIndex 的分工对比",
     "image": "images/langchain.png"
   },
   {
     "id": "langgraph",
     "category": "开发框架与工具",
     "name": "LangGraph",
+    "summary": "用状态图（节点+边）编排 Agent 工作流：支持循环、分支、人工介入、断点恢复。",
     "description": "LangChain 团队推出的基于状态图（State Graph）的 Agent 编排框架：把工作流建模成节点（步骤）和边（流转条件），显式定义状态如何流转，天然支持循环、分支、人工介入（human-in-the-loop）和断点恢复。相比线性的 Chain，它适合'有环、有条件路由、有审批'的复杂 Agent 工作流，是当前生产级 Agent 的主流选择。",
+    "background": "2024 年 1 月 LangChain 团队推出 LangGraph，直击裸 Agent 循环的三大痛：控制流不可控、状态无法持久化、人工介入没接口。灵感来自 Pregel/分布式图计算和状态机思想。2024-2025 年随着生产级 Agent 需求爆发（审批流、长任务、多 Agent），LangGraph 成为编排层事实标准之一，OpenAI 也推出类似定位的 Agents SDK。",
+    "problem": "解决'线性 Chain 表达不了真实业务流程'的问题：真实工作流有条件分支（复杂问题走深度检索）、有循环（重试、多轮）、有审批（敏感操作等人确认）、有中断恢复（任务跑一半服务重启）。这些用 if-else 包 Chain 会写成面条，状态图把控制流变成一等公民。",
     "analogy": "Chain 是流水线（一头进一头出，不能回头），LangGraph 是地铁线路图：有环线、有换乘站（条件分支），还能在中途任意站叫停检查（人工介入）。",
     "points": [
       "三大件：State（共享状态）+ Node（每个节点读写状态）+ Edge（条件路由）",
       "内置 checkpoint 持久化，进程重启或人工审批后可从断点继续",
       "写条件边（conditional edge）实现'工具失败走重试节点，成功走汇总节点'"
     ],
+    "pitfalls": [
+      "把简单顺序流程也画成图——两个节点的活用 StateGraph 是杀鸡用牛刀，Chain/函数更直白",
+      "State 定义随意膨胀——所有节点共享一个大 dict，字段互相踩，状态结构要按职责设计",
+      "忽视 checkpoint 的存储成本——每个超步都持久化，大状态对象要精简或外置到数据库"
+    ],
+    "applications": [
+      "带审批的自动化：Agent 到敏感节点挂起等人工批准，批准后从断点继续",
+      "客服工单系统：分类→分流→处理→质检→升级的完整状态机",
+      "多 Agent 协作：Manager-Supervisor 模式下多专家节点的调度与状态共享",
+      "长时任务：深度研究 Agent 跑 30 分钟，checkpoint 让它可恢复可观测"
+    ],
     "example": {
       "scenario": "客服工单 Agent：分类节点 → 简单问题走 FAQ 答复节点，复杂问题走检索节点 → 检索置信度低则进入'转人工'节点并暂停等待人工处理，审批后继续。这个带环带审批的流程用线性 Chain 写不出来。",
       "code": "from langgraph.graph import StateGraph, END\nfrom typing import TypedDict\n\nclass State(TypedDict):\n    question: str\n    route: str\n    answer: str\n\ndef classify(state):        # 节点1: 分类\n    state['route'] = llm(f'简单问题回复simple，复杂回复complex: '\n                         f\"{state['question']}\")\n    return state\n\ndef faq(state):             # 节点2a: 简单答复\n    state['answer'] = '这是FAQ答案'; return state\n\ndef deep_search(state):     # 节点2b: 深度检索\n    state['answer'] = '这是检索后的详细答案'; return state\n\ng = StateGraph(State)\ng.add_node('classify', classify)\ng.add_node('faq', faq)\ng.add_node('deep_search', deep_search)\ng.set_entry_point('classify')\ng.add_conditional_edges('classify',        # 条件路由\n    lambda s: s['route'], {'simple': 'faq', 'complex': 'deep_search'})\ng.add_edge('faq', END)\ng.add_edge('deep_search', END)\napp = g.compile()\nprint(app.invoke({'question': '公司年假政策？'}))",
       "lang": "python"
     },
+    "related": [
+      "agent",
+      "react-loop",
+      "working-memory"
+    ],
+    "extended": "进阶方向：LangGraph checkpoint/时间旅行调试、Supervisor 模式、与 Temporal 类工作流引擎的对比",
     "image": "images/langgraph.png"
   },
   {
     "id": "lcel",
     "category": "开发框架与工具",
     "name": "LCEL（LangChain Expression Language）",
+    "summary": "LangChain 的管道语法：prompt | llm | parser 一行串链，免费获得流式/并发/异步。",
     "description": "LangChain 的声明式组装语法：用管道符 | 把组件串成链，如 prompt | llm | parser。被串起来的组件都实现 Runnable 接口，天然获得 batch（并发批处理）、stream（流式输出）、ainvoke（异步调用）等能力，无需额外代码。还提供 RunnableParallel（并行分支）、RunnablePassthrough（透传）、RunnableLambda（包自定义函数）等组合子。",
+    "background": "LCEL 随 LangChain 0.1（2023 年底）推出，理念是'声明式组合'：组件实现统一的 Runnable 接口，管道符只声明数据流向，运行时能力（batch/stream/ainvoke/重试）由框架统一注入。它受 Unix 管道和函数式组合思想影响，让'并发批处理 100 个请求'从手写线程池变成一次 .batch() 调用。",
+    "problem": "解决'组合逻辑与运行能力耦合'的问题：手写代码里加流式输出、加并发、加异步，每一样都要重构函数签名。LCEL 里组件只管'输入→输出'，运行时能力自动齐备——业务代码和执行策略解耦。",
     "analogy": "工厂流水线语法：原料 | 加工机 | 质检 | 打包——声明这条流水线，框架自动给你并发多条流水线、边生产边出货（流式）。",
     "points": [
       "任何 Runnable 都自动有 invoke/batch/stream/ainvoke 四件套",
       "复杂链的嵌套要靠 RunnableParallel 在一步里同时算多个值",
       "调试用 chain.get_graph().print_ascii() 可视化链结构"
     ],
+    "pitfalls": [
+      "管道嵌套太深难以调试——链里套链再套并行，出错时定位困难，用 .get_graph().print_ascii() 看结构",
+      "在 RunnableLambda 里写阻塞调用——拖垮异步整条链，IO 操作要用异步版本",
+      "以为 LCEL 链自动有重试——重试要显式加 .with_retry()，默认没有"
+    ],
+    "applications": [
+      "RAG 链组装：检索、模板填充、生成、解析四件套管道化",
+      "批量数据处理：给 500 条客户评语打标签，.batch() 并发跑完",
+      "流式对话服务：.stream() 逐 token 推给前端，打字机效果零额外代码",
+      "并行分支：RunnableParallel 同时算'答案'和'引用来源'再合并"
+    ],
     "example": {
       "scenario": "RAG 链需要同时把'检索结果'和'原始问题'填进模板：用 RunnableParallel 让两路并行计算再合流——用管道语法写并行，不用手写线程。",
       "code": "from langchain_core.runnables import RunnableParallel, RunnablePassthrough\n\n# 并行分支：context 走检索，question 原样透传\nrag_chain = RunnableParallel(\n    context=retriever,\n    question=RunnablePassthrough(),\n) | prompt | llm | StrOutputParser()\n\n# 流式输出：LCEL 链免费获得 stream 能力\nfor chunk in rag_chain.stream('年假有几天？'):\n    print(chunk, end='', flush=True)   # 逐字输出，无需额外代码",
       "lang": "python"
     },
+    "related": [
+      "langchain",
+      "asyncio",
+      "llm-api"
+    ],
+    "extended": "进阶方向：Runnable 协议全族（with_retry/with_fallbacks/with_config）、链的可视化与追踪",
     "image": "images/lcel.png"
   },
   {
     "id": "llamaindex",
     "category": "开发框架与工具",
     "name": "LlamaIndex",
+    "summary": "数据接入与检索专家：连接器最多、RAG 默认配置最精，管'喂给模型什么'。",
     "description": "专注于'数据接入 + 索引 + 检索'的框架，强项是 RAG：内置 100+ 种数据连接器（PDF、Notion、数据库、API），提供 QueryEngine（问答引擎）、ChatEngine（对话引擎）等开箱即用的高层抽象，分块、向量化、检索策略的默认配置也调得比较精细。与 LangChain 的分工：重 RAG 数据管道选 LlamaIndex，重 Agent 编排选 LangChain/LangGraph，两者也可混用。",
+    "background": "2022 年底 Jerry Liu 发起（原名 GPT Index），最初专注'给 GPT 接私有数据'的索引方案。当 LangChain 走'什么都做'的大而全路线时，LlamaIndex 深耕数据层：100+ 数据连接器、精细的索引结构（向量/树/关键词/知识图谱）、开箱即用的 QueryEngine。2023 年后成为 RAG 数据管道的代名词，与企业级方案（LlamaCloud）双线并行。",
+    "problem": "解决'RAG 数据管道繁琐'的问题：接数据源、清洗、分块、索引、检索、融合——每个环节自己写要一周。LlamaIndex 把默认配置调到'开箱效果良好'，15 行代码跑通高质量 RAG，把调优精力留给业务特有的部分。",
     "analogy": "如果 LangChain 是全能工具箱，LlamaIndex 就是专业的图书整理系统：管进书（连接器）、编目录（索引）、查书（检索）样样精通，但你让它去'订机票'就不是它的主场了。",
     "points": [
       "核心抽象：Reader（读数据）→ Index（建索引）→ QueryEngine（查询）",
       "默认的 node_parser 分块和检索融合策略质量较高，原型阶段少调参",
       "20 行代码就能跑通一个高质量 RAG，是快速验证知识库想法的利器"
     ],
+    "pitfalls": [
+      "和 LangChain 二选一的思维——两者可混用：LlamaIndex 管数据检索层，LangChain/LangGraph 管编排层",
+      "默认参数直接上生产——默认分块和 top_k 对原型友好，生产要按自己的评测集调",
+      "把 LlamaIndex 当 Agent 框架用——它的主场是数据索引检索，复杂编排仍推荐 LangGraph"
+    ],
+    "applications": [
+      "快速搭建知识库问答：读 PDF 目录→建索引→QueryEngine 提问，一个下午上线",
+      "多数据源整合：Notion + 数据库 + PDF + 网页统一索引检索",
+      "企业级 RAG 平台（LlamaCloud）：托管解析、索引、检索",
+      "复杂索引结构：知识图谱索引回答'A 和 B 什么关系'类关联问题"
+    ],
     "example": {
       "scenario": "把一个 200 页 PDF 手册变成问答机器人：SimpleDirectoryReader 读入 → VectorStoreIndex 建索引 → as_query_engine 得到问答引擎，全程不到 15 行。",
       "code": "from llama_index.core import VectorStoreIndex, SimpleDirectoryReader\n\n# 读目录下所有文档\ndocuments = SimpleDirectoryReader('./handbook').load_data()\n\n# 建向量索引（自动分块+embedding）\nindex = VectorStoreIndex.from_documents(documents)\n\n# 一步得到问答引擎\nquery_engine = index.as_query_engine(similarity_top_k=3)\nresponse = query_engine.query('年假有几天？')\nprint(response)\nprint(response.source_nodes)   # 带来源引用",
       "lang": "python"
     },
+    "related": [
+      "rag",
+      "langchain",
+      "chunking"
+    ],
+    "extended": "进阶方向：LlamaIndex 索引类型全景、LlamaParse 文档解析、模块化组件与 LangChain 互操作",
     "image": "images/llamaindex.png"
   },
   {
     "id": "autogen",
     "category": "开发框架与工具",
     "name": "AutoGen",
+    "summary": "微软的多 Agent 群聊框架：Agent 们在对话中协作，代码可被真实执行验证。",
     "description": "微软开源的多 Agent 对话框架：把每个 Agent 建模成可对话的参与者（AssistantAgent、UserProxyAgent 等），通过 GroupChat 让多个 Agent 围绕任务多轮对话、互相批评、协作完成。特点是'以对话为编排'——没有显式流程图，任务在聊天中自然推进。适合研究多 Agent 协作模式、需要视角碰撞的任务（辩论、互相评审代码）。",
+    "background": "2023 年微软研究院开源 AutoGen，核心创新是'以对话为编排'：没有硬编码流程，多 Agent 通过群聊自然协作，LLM 决定下一个发言人。它的另一个杀手锏是 UserProxyAgent 能真实执行代码并回贴结果，形成'写代码→跑代码→修 bug'的自动闭环。2024 年升级为 AutoGen 0.4（事件驱动架构重写），生态地位稳固。",
+    "problem": "解决'任务无法预先画成流程图'的开放性协作问题：'写个爬虫'的步骤因网站而异，没法写成固定 Chain。让写手、执行者、审查者在对话中见招拆招，人类只需要发第一条消息和收最后的结果。",
     "analogy": "开圆桌会议：没有主持人写死议程，一群专家（Agent）围绕议题你一言我一语， coder 写代码、reviewer 挑毛病、userproxy 负责实际运行代码并回贴结果，聊到问题解决散会。",
     "points": [
       "核心角色：AssistantAgent（动脑）+ UserProxyAgent（动手执行代码/工具）",
       "GroupChat + GroupChatManager 管理发言顺序，可选 auto 模式让 LLM 选下一个发言人",
       "对话式编排自由度高但可控性弱，生产环境要设最大轮数防聊飞"
     ],
+    "pitfalls": [
+      "群聊 Agent 数量失控——每加一个 Agent token 翻倍，3-4 个是实用上限",
+      "auto 发言模式聊飞——话题发散收不回来，要设最大轮数和明确的终止条件",
+      "放任 UserProxy 执行任意代码——必须在沙箱/容器里执行，且限制网络和文件系统权限"
+    ],
+    "applications": [
+      "自动化编程：Coder 写代码、UserProxy 执行运行、报错自动回传修复",
+      "研究辩论：正反两个研究 Agent 独立调研后互相质证，产出更平衡的结论",
+      "数据科学流水线：数据工程师 Agent 和分析师 Agent 对话着完成清洗+分析",
+      "教学模拟：多角色（面试官/候选人）对话模拟，用于评测与训练"
+    ],
     "example": {
       "scenario": "写爬虫任务：UserProxy 提需求 → Coder 写出代码 → UserProxy 实际运行，报错贴回去 → Coder 修 bug → 再运行，直到 UserProxy 汇报'运行成功，数据已保存'，对话终止。",
       "code": "from autogen import AssistantAgent, UserProxyAgent\n\nconfig = [{'model': 'gpt-4o', 'api_key': '...'}]\n\ncoder = AssistantAgent(\n    'coder', llm_config={'config_list': config},\n    system_message='你写Python代码，只输出可执行代码。')\n\nuser = UserProxyAgent(\n    'user', code_execution_config={'work_dir': 'tmp'},\n    human_input_mode='NEVER',      # 全自动，代码由代理真实执行\n    max_consecutive_auto_reply=5)  # 最多自动往返5轮，防死循环\n\nuser.initiate_chat(\n    coder,\n    message='写个脚本抓取 https://example.com 的标题并保存为csv')",
       "lang": "python"
     },
+    "related": [
+      "multi-agent",
+      "crewai",
+      "loop-guard"
+    ],
+    "extended": "进阶方向：AutoGen 0.4 新架构、GroupChat 发言策略、代码执行沙箱方案（Docker/Jupyter）",
     "image": "images/autogen.png"
   },
   {
     "id": "crewai",
     "category": "开发框架与工具",
     "name": "CrewAI",
+    "summary": "角色驱动的 Agent 团队框架：role/goal/backstory 三件套写好，团队就能开工。",
     "description": "角色驱动的多 Agent 编排框架：用 Crew（团队）、Agent（角色）、Task（任务）、Process（协作模式）四个概念组织工作流。每个 Agent 有明确的 role、goal、backstory 三件套，Task 显式指定由谁执行、产出什么、交给谁。相比 AutoGen 的自由对话，CrewAI 的流程更确定、可读性更好，适合'分工明确'的内容生产、研究报告类流水线。",
+    "background": "2023 年底 João Moura 创建 CrewAI，踩中 AutoGen（太自由难控）和 LangChain Agent（抽象太重）之间的空档：用'剧组'隐喻提供结构化但轻量的多 Agent 编排。role/goal/backstory 的角色三件套设计直观易上手，2024 年增速迅猛，成为内容生产、研究类流水线的热门选择。",
+    "problem": "解决'多 Agent 协作缺少清晰分工语言'的问题：谁负责什么、产出给谁、什么标准算完成——CrewAI 用 Agent（角色）、Task（任务+验收标准+上下文依赖）、Process（顺序/层级模式）三个概念把分工写明白，流程确定可读，比自由群聊好维护。",
     "analogy": "剧组拍戏：导演（Crew）按剧本（Tasks）安排演员（Agents）——这位演侦探（role），目标是'查明真相'（goal），人设是'退役警探'（backstory）。每个镜头谁上、拍完交给谁，白纸黑字写清楚。",
     "points": [
       "role/goal/backstory 三件套写得好坏直接影响角色发挥",
       "Process.sequential（顺序接力）最稳；hierarchical（经理分派）更灵活但贵",
       "Task 之间用 output 传递中间产物，结构化输出用 pydantic 约束"
     ],
+    "pitfalls": [
+      "backstory 写成一句废话——'你是专家'不如'你有十年财报分析经验，习惯先看现金流'，人设细节决定角色发挥",
+      "任务上下文依赖设错——B 任务需要 A 的产出但没声明 context，拿到的是空输入",
+      "hierarchical 模式无脑用——Manager 自动分派很酷但 token 消耗大，流程确定时 sequential 更稳"
+    ],
+    "applications": [
+      "内容工厂：调研→写作→审核→SEO 优化的周报/文章流水线",
+      "尽职调查：多分析师分别查财务/法务/市场，汇总成报告",
+      "旅行规划：交通、住宿、行程三个专家 Agent 协作出攻略",
+      "简历筛选流水线：解析→技能匹配→分级→生成面试提纲"
+    ],
     "example": {
       "scenario": "市场周报团队：调研员（搜集行情）→ 分析师（提炼趋势）→ 作家（成稿）。每个 Task 指定执行者和期望产出，writer 的任务 context 引用 analyst 的输出，形成接力。",
       "code": "from crewai import Agent, Task, Crew, Process\n\nresearcher = Agent(\n    role='市场调研员',\n    goal='收集本周AI行业重大新闻',\n    backstory='十年科技媒体经验，擅长信息搜集与甄别',\n    tools=[search_tool], verbose=True)\n\nwriter = Agent(\n    role='科技专栏作家',\n    goal='把素材写成一篇可读性强的周报',\n    backstory='以深入浅出著称的技术写作者')\n\nt1 = Task(description='搜集并整理本周Top5 AI新闻', agent=researcher,\n          expected_output='5条新闻列表，每条含来源')\nt2 = Task(description='基于调研结果撰写周报', agent=writer,\n          expected_output='800字Markdown周报', context=[t1])\n\ncrew = Crew(agents=[researcher, writer],\n            tasks=[t1, t2], process=Process.sequential)\nprint(crew.kickoff())",
       "lang": "python"
     },
+    "related": [
+      "multi-agent",
+      "autogen",
+      "planning"
+    ],
+    "extended": "进阶方向：CrewAI Flow（事件化工作流）、角色 prompt 设计模式、与 LangGraph Supervisor 的对比",
     "image": "images/crewai.png"
   },
   {
     "id": "mcp",
     "category": "开发框架与工具",
     "name": "MCP（Model Context Protocol）",
+    "summary": "AI 应用的 USB-C：工具方实现一次 MCP Server，所有 AI 客户端即插即用。",
     "description": "Anthropic 于 2024 年底推出的开放协议，标准化 LLM 应用（MCP Client）与外部工具/数据源（MCP Server）之间的连接方式。以前每个应用要为每个工具手写对接（M×N 问题），有了 MCP，工具方实现一次 MCP Server，所有支持 MCP 的客户端（Claude Desktop、Cursor、ZCode 等）都能即插即用。协议定义了 tools（工具）、resources（资源）、prompts（提示模板）三类能力。",
+    "background": "2024 年 11 月 Anthropic 开源 MCP（Model Context Protocol），回应'M×N 集成地狱'：M 个 AI 应用 × N 个工具，没有标准时要做 M×N 次对接。MCP 把它变成 M+N：工具方写一次 Server，所有支持协议的客户端通用。发布后迅速被 OpenAI、Google 等跟进支持，从 Anthropic 私有协议升格为行业事实标准，生态里已有数千个社区 Server。",
+    "problem": "解决'每个 AI 应用都要重复对接每个工具'的问题：数据库、GitHub、飞书、内部 API……每个客户端各写一遍适配，工具方也要维护 N 套 SDK。MCP 用标准协议（JSON-RPC）统一'发现工具、描述参数、调用执行'的接口，像 USB 统一了充电口。",
     "analogy": "USB-C 接口：以前每个设备一种充电口（M×N 根线），统一成 USB-C 后，任何充电器插任何设备。MCP 就是 AI 应用的 USB-C，工具方做一次 Server，所有 AI 客户端通用。",
     "points": [
       "两种传输方式：stdio（本地进程）和 Streamable HTTP（远程服务）",
       "Server 用 SDK 几十行就能发布一个工具，Client 自动发现并列出工具",
       "写 MCP Server 的心智模型：把已有的 REST API/函数包装成标准工具描述"
     ],
+    "pitfalls": [
+      "把 MCP 当成只有 Claude 能用——协议是开放的，任何客户端实现协议即可接入",
+      "MCP Server 不做鉴权就暴露敏感工具——第三方 Server 可能被恶意构造，敏感操作要加确认和权限控制",
+      "stdio 模式用于远程场景——本地进程用 stdio，远程服务要用 Streamable HTTP 传输"
+    ],
+    "applications": [
+      "开发工具集成：Claude Desktop/Cursor/ZCode 通过 MCP 操作本地文件、跑命令、查 git",
+      "企业内部工具统一接入：CRM/工单/知识库包装成 MCP Server，全公司 AI 助手共用",
+      "个人效率：天气、日历、智能家居设备的统一 AI 控制入口",
+      "数据平台：让任意 AI 客户端安全查询数仓（带鉴权和权限过滤）"
+    ],
     "example": {
       "scenario": "公司已有天气 API。写一个 40 行的 MCP Server 包装它，发布后：Claude Desktop、Cursor、自研 Agent 全都能直接调用 query_city 工具——不用在每个客户端里重复写对接代码。",
       "code": "# mcp_server_weather.py — 一个最小的MCP Server\nfrom mcp.server.fastmcp import FastMCP   # pip install mcp\n\nmcp = FastMCP('weather')\n\n@mcp.tool()\ndef query_city(city: str) -> str:\n    '''查询指定城市当前天气。city 传中文城市名，如\"北京\"。'''\n    return requests.get(f'https://api.example.com/w?c={city}').text\n\nif __name__ == '__main__':\n    mcp.run()          # stdio 模式启动\n\n# 客户端(Claude Desktop等)只需在配置里登记这条命令，\n# query_city 工具即自动出现，模型可直接调用。",
       "lang": "python"
     },
+    "related": [
+      "function-calling",
+      "tool-use",
+      "json-schema-tools"
+    ],
+    "extended": "进阶方向：MCP 协议规范（tools/resources/prompts 三原语）、写一个自己的 Server、MCP 安全最佳实践",
     "image": "images/mcp.png"
   },
   {
     "id": "dify-coze",
     "category": "开发框架与工具",
     "name": "Dify / Coze（低代码平台）",
+    "summary": "低代码 LLM 应用工厂：拖拽工作流 + 内置知识库 + 一键发布，半天上线一个 Bot。",
     "description": "可视化 LLM 应用构建平台：拖拽节点编排工作流、表单化配置 prompt、内置知识库管理和 API 发布，不写或少写代码就能上线应用。Dify 开源可私有化部署，适合企业内部平台；Coze（扣子）是字节的产品，与飞书生态集成深，适合快速做 Bot。定位是'应用工厂'：验证想法、赋能非工程师极快，但深度定制和复杂逻辑受平台能力约束。",
+    "background": "Dify 2023 年开源（原 SOMA 团队），定位'LLMOps 平台'，私有化部署能力击中企业合规需求，GitHub 星标增长迅猛；Coze（扣子）是字节 2024 年推出的商业化平台，与抖音/飞书生态深度集成。两者代表'应用工厂'路线：把 LLM 应用的通用部分（编排、知识库、发布、监控）平台化，让非工程师也能构建 AI 应用。",
+    "problem": "解决'AI 应用开发门槛高、迭代慢'的问题：业务部门想做个 FAQ 机器人，走研发排期要几周。低代码平台上传文档、拖几个节点、配置 prompt，半天发布——想法验证的速度提升一个数量级。",
     "analogy": "预制菜 vs 从头做菜：Dify/Coze 是净菜厨房——切配调料都备好，20 分钟出四菜一汤；但要复刻米其林独门菜（深度定制），还得自己开灶台（写代码框架）。",
     "points": [
       "适合场景：内部知识库问答、客服 Bot、营销文案流水线等标准应用",
       "平台边界明显：复杂状态管理、特殊工具对接还是要导出/写代码",
       "Dify 开源版数据不出内网，是企业合规场景的重要加分项"
     ],
+    "pitfalls": [
+      "平台边界踩坑——复杂状态管理、特殊协议对接、深度定制最终都要写代码，平台擅长的是标准应用",
+      "私有数据随手传云端 Coze——合规敏感数据选开源 Dify 私有化部署",
+      "工作流节点堆成意大利面——节点过多难维护，复杂逻辑拆子流程或导出代码框架"
+    ],
+    "applications": [
+      "企业内部知识库问答：HR/IT/制度文档上传即建Bot，飞书/钉钉直接用",
+      "营销文案流水线：多节点工作流（选题→初稿→审核→多平台适配）",
+      "客户支持 Bot：接知识库 + 转人工规则 + 对话数据回流分析",
+      "原型验证：先在平台搭出效果说服老板，再决定是否工程化自研"
+    ],
     "example": {
       "scenario": "HR 用 Dify 半天搭出'员工手册问答机器人'：上传手册 PDF（自动分块入库）→ 拖一个'知识检索 + LLM 节点'工作流 → 发布为飞书/网页入口。同样的东西自研要 3~5 天。",
       "code": "# Dify 工作流的节点等价代码示意（平台里是拖拽配置）\nworkflow = {\n    'nodes': [\n        {'type': 'start', 'variables': ['question']},\n        {'type': 'knowledge-retrieval',   # 知识库检索节点\n         'dataset': '员工手册', 'top_k': 3},\n        {'type': 'llm',                   # LLM节点\n         'prompt': '仅根据{{context}}回答{{question}}'},\n        {'type': 'answer'},\n    ]\n}\n# 发布后自动获得 REST API: POST /v1/chat-messages",
       "lang": "python"
     },
+    "related": [
+      "rag",
+      "langchain",
+      "mcp"
+    ],
+    "extended": "进阶方向：Dify 工作流编排实操、平台 vs 自研的决策框架、LLMOps（版本/评测/监控）体系",
     "image": "images/dify-coze.png"
   },
   {
     "id": "llm-api",
     "category": "开发框架与工具",
     "name": "OpenAI API / DeepSeek API",
+    "summary": "和大模型对话的标准插座：OpenAI 格式一统江湖，换模型只需换 base_url。",
     "description": "调用大模型服务的 HTTP 接口，事实标准是 OpenAI 的 Chat Completions 格式：messages 数组（system/user/assistant/tool 角色）进、choices 出。DeepSeek、Qwen、Kimi 等国产模型普遍兼容该格式，只需换 base_url 和 api_key，代码零改动。核心参数：model、messages、temperature、max_tokens、tools、stream。",
+    "background": "2021 年 OpenAI Codex API 开启模型即服务，2023 年 3 月 Chat Completions 接口定型成为事实标准。DeepSeek、Qwen（DashScope 兼容模式）、Kimi、GLM 纷纷实现兼容格式，'OpenAI 兼容'成了行业入场券。这复制了数据库行业 PostgreSQL 兼容协议的历史：接口标准化，实现自由竞争。",
+    "problem": "解决'每家模型一个接入方式'的碎片化问题：如果每家 API 格式不同，换模型=重写接入层。统一格式后，客户端代码写一次，模型供应商随便换——议价能力、容灾备份、A/B 测试全部变得容易。",
     "analogy": "插座的统一标准：不管哪家电厂发电（哪家模型），插座接口（API 格式）都一样，换个插头（base_url）就能用电。",
     "points": [
       "messages 是无状态的：所谓'多轮对话'是每轮把历史全部重发",
       "stream=True 逐 token 返回（SSE），是聊天界面打字机效果的来源",
       "读懂返回的 usage 字段（prompt_tokens/completion_tokens）才能算成本"
     ],
+    "pitfalls": [
+      "以为'兼容'等于 100% 一致——各家对参数支持度不同（有的不支持 logit_bias），关键参数要逐家验证",
+      "忽视 max_tokens 和 stop 的细节差异——截断行为不同导致输出莫名截半",
+      "API Key 硬编码进代码/前端——密钥泄漏等于把信用卡挂网上，用环境变量和网关代理"
+    ],
+    "applications": [
+      "模型供应商自由切换：生产用 DeepSeek，故障切 Qwen，代码零改动",
+      "网关层建设：统一计费、限流、日志、模型路由（LiteLLM/OneAPI 类项目）",
+      "本地开源模型服务：vLLM/Ollama 暴露 OpenAI 兼容接口，应用无感上云/下云",
+      "流式应用：SSE 逐 token 推送，聊天界面的打字机效果"
+    ],
     "example": {
       "scenario": "同一个 chat 函数，只改 base_url 就能在 GPT、DeepSeek、Qwen 之间无缝切换——兼容 OpenAI 格式已成为行业默契，这也是换模型成本的底线保障。",
       "code": "from openai import OpenAI\n\ndef make_client(provider='deepseek'):\n    conf = {\n        'openai':   ('https://api.openai.com/v1', 'sk-xxx'),\n        'deepseek': ('https://api.deepseek.com/v1', 'sk-yyy'),\n        'qwen':     ('https://dashscope.aliyuncs.com/compatible-mode/v1',\n                     'sk-zzz'),\n    }[provider]\n    return OpenAI(base_url=conf[0], api_key=conf[1])\n\nresp = make_client('deepseek').chat.completions.create(\n    model='deepseek-chat',\n    messages=[\n        {'role': 'system', 'content': '你是一个简洁的助手'},\n        {'role': 'user', 'content': '用一句话解释RAG'},\n    ],\n    temperature=0.3,\n)\nprint(resp.choices[0].message.content)\nprint(resp.usage)   # prompt_tokens / completion_tokens -> 成本",
       "lang": "python"
     },
+    "related": [
+      "model-selection",
+      "http-retry",
+      "logging-monitoring"
+    ],
+    "extended": "进阶方向：SSE 流式协议细节、Responses API（OpenAI 新接口）、模型网关（LiteLLM）部署",
     "image": "images/llm-api.png"
   },
   {
     "id": "python-basics",
     "category": "工程与后端",
     "name": "Python 基础",
+    "summary": "AI 开发的通用语言：类型提示、装饰器、生成器这'三板斧'是 LLM 工程的地基。",
     "description": "AI 应用开发的主力语言。除变量、函数、类等基础语法外，LLM 开发高频用到：类型提示（函数签名即文档，配合 mypy 检查）、装饰器（计日志、加重试）、生成器与 yield（流式输出的实现方式）、异常处理（调用外部 API 的容错基础）、虚拟环境（venv/uv，隔离项目依赖）。",
+    "background": "Python 从科研时代就是 ML 的事实语言（NumPy/PyTorch 生态），LLM 时代延续统治：LangChain/LlamaIndex/vLLM 全是 Python 优先。语言本身也在进化：3.5 引入 async/await、3.6 类型提示、3.10 结构模式匹配——'写 Python 像写伪代码'的同时保住了工程化能力。2023 年后 uv 等新一代工具把依赖管理速度提升十倍以上。",
+    "problem": "解决'AI 时代需要胶水语言'的问题：模型调用、数据处理、API 服务、脚本自动化，工程师需要一门'样样都行、上手极快、生态最全'的语言。Python 的类型提示体系还让'动态语言的灵活'与'静态检查的安全'兼得。",
     "analogy": "Python 之于 AI 开发，就像英语之于国际会议——不是唯一的语言，但所有人默认用它交流，生态里最好的工具也都先为它准备。",
     "points": [
       "类型提示不是装饰：FastAPI、Pydantic、CrewAI 都靠它工作",
       "生成器/yield 是理解流式响应（打字机效果）的基础",
       "每个项目独立虚拟环境 + requirements.txt/pyproject 锁依赖"
     ],
+    "pitfalls": [
+      "不用虚拟环境全局装包——项目间依赖冲突（torch 版本地狱），venv/uv 是第一步",
+      "类型提示只写一半——FastAPI/Pydantic 靠完整类型工作，混用 any 会让自动校验失效",
+      "忽略 GIL 的存在——多线程跑 CPU 密集任务毫无加速，CPU 并行用多进程，IO 并行用 asyncio"
+    ],
+    "applications": [
+      "LLM 应用全套：调用 API、RAG 管道、Agent、数据处理脚本",
+      "FastAPI 服务：把模型能力包装成 HTTP 接口给业务调用",
+      "数据工程：pandas 清洗语料、构建评测集、分析调用日志",
+      "自动化脚本：批量跑实验、定时任务、运维工具"
+    ],
     "example": {
       "scenario": "一个带类型提示、装饰器、生成器的典型 LLM 函数：@retry 负责失败重试，yield 逐段吐出流式结果——三个知识点在一个真实场景里同时出现。",
       "code": "import functools, time\nfrom typing import Iterator\n\ndef retry(times=3):                      # 装饰器：失败重试\n    def deco(fn):\n        @functools.wraps(fn)\n        def wrapper(*args, **kwargs):\n            for i in range(times):\n                try:\n                    return fn(*args, **kwargs)\n                except Exception:\n                    if i == times - 1:\n                        raise\n                    time.sleep(2 ** i)   # 指数退避\n        return wrapper\n    return deco\n\n@retry(times=3)\ndef stream_answer(prompt: str) -> Iterator[str]:   # 类型提示\n    for chunk in llm.stream(prompt):\n        yield chunk.content               # 生成器：流式输出\n\nfor piece in stream_answer('解释RAG'):\n    print(piece, end='')",
       "lang": "python"
     },
+    "related": [
+      "fastapi",
+      "pydantic",
+      "asyncio"
+    ],
+    "extended": "进阶方向：uv 包管理、dataclass/protocol、Python 性能剖析（cProfile）",
     "image": "images/python-basics.png"
   },
   {
     "id": "fastapi",
     "category": "工程与后端",
     "name": "FastAPI",
+    "summary": "LLM 应用的对外服务门面：类型即校验、文档自动生成、异步原生支持。",
     "description": "高性能 Python Web 框架，是 LLM 应用对外提供服务的标配：基于类型提示自动校验请求参数、自动生成 Swagger 交互文档、原生支持 async/await（适合 LLM 调用这种 IO 密集场景）、依赖注入系统管理配置和会话。相比 Flask 的最大优势就是异步和自动化校验——两者恰好都是 LLM API 网关最需要的。",
+    "background": "2018 年 Sebastián Ramírez 发布 FastAPI，综合了 Flask 的简洁和 Starlette 的异步性能，并靠 Pydantic 类型校验+自动文档两大杀手锏快速增长。LLM 时代它成为标配：模型服务天然是'IO 等待为主'（等 LLM 返回），FastAPI 的 async 模型完美匹配，SSE 流式响应支持也让它成为聊天后端首选。",
+    "problem": "解决'把 Python 函数变成生产级 API 很麻烦'的问题：参数校验、错误响应、接口文档、并发处理，Flask 时代要拼一堆插件。FastAPI 用类型提示一次声明全部自动搞定，前后端联调效率翻倍。",
     "analogy": "自动化前台的餐厅领位员：客人一来（请求到达），自动核对预订信息（参数校验）、安排座位（路由）、把菜单（接口文档）递上——全都不用你招呼。",
     "points": [
       "路径函数用 async def + httpx.AsyncClient 转发上游 LLM 请求",
       "Pydantic 模型定义请求体，参数错了自动返回 422 和详细原因",
       "启动后访问 /docs 即得到可交互调试的 API 文档，前后端联调神器"
     ],
+    "pitfalls": [
+      "async 路由里调用阻塞库（requests、time.sleep）——整个事件循环卡死，吞吐量归零，要用 httpx/asyncio.sleep",
+      "同步函数处理长任务——worker 被占死，重任务丢后台队列（Celery/arq）",
+      "生产环境用 --reload 模式——那是开发热重载，生产用 uvicorn/gunicorn 多 worker"
+    ],
+    "applications": [
+      "LLM 网关：统一封装多模型调用、计费、限流",
+      "RAG 问答服务：/ask 接口 + SSE 流式返回 + 来源引用",
+      "Webhook 接收器：飞书/钉钉/Slack 机器人的回调处理",
+      "内部工具 API：数据标注平台、评测脚本的服务化"
+    ],
     "example": {
       "scenario": "给 RAG 问答引擎包一层 HTTP 服务：POST /ask 接收问题、流式返回答案——前端打字机效果和后端 stream 逐段转发，几十行代码搞定。",
       "code": "from fastapi import FastAPI\nfrom pydantic import BaseModel\n\napp = FastAPI(title='RAG 问答服务')\n\nclass AskReq(BaseModel):          # 请求体自动校验\n    question: str\n    top_k: int = 3\n\n@app.post('/ask')\nasync def ask(req: AskReq):\n    docs = await retriever.ainvoke(req.question)  # 异步检索\n    answer = await llm.ainvoke(...)\n    return {'answer': answer, 'sources': [d.metadata for d in docs]}\n\n# uvicorn main:app --reload 启动后，打开 /docs 可直接调试\n# curl -X POST localhost:8000/ask -H 'Content-Type: application/json' \\\n#      -d '{\"question\": \"年假几天？\"}'",
       "lang": "python"
     },
+    "related": [
+      "pydantic",
+      "asyncio",
+      "python-basics"
+    ],
+    "extended": "进阶方向：SSE/WebSocket 流式响应、依赖注入系统、中间件与后台任务",
     "image": "images/fastapi.png"
   },
   {
     "id": "pydantic",
     "category": "工程与后端",
     "name": "Pydantic",
+    "summary": "用类型声明统治数据：校验、序列化、文档三合一，LLM 结构化输出的基石。",
     "description": "基于类型提示的数据校验和序列化库，Python 生态的事实标准。定义一个 BaseModel 子类，字段类型、约束（长度、范围、枚举）声明清楚，脏数据进来会抛出带完整路径的错误信息。在 LLM 应用里三大用途：FastAPI 请求/响应模型、LLM 结构化输出（instructor 库直接把模型回复解析成 Pydantic 对象）、Agent 状态的 schema 定义。",
+    "background": "2014 年 Pydantic v1 发布，2018 年起随 FastAPI 爆红。v2（2023）用 Rust 重写核心（pydantic-core），性能提升 5-50 倍。LLM 时代它获得第二生命：instructor 等库让'模型输出→Pydantic 对象'变成一行代码，结构化输出（JSON Schema 约束）的底层就是 Pydantic 模型定义。",
+    "problem": "解决'脏数据在系统里流窜'的问题：外部输入（用户请求、模型输出、第三方 API）永远不可信。在系统边界用模型声明'数据长什么样'，不合法数据进门就被拦下并给出精确错误，而不是在三层调用之后莫名崩溃。",
     "analogy": "机场安检 + 行李打包二合一：数据进来先安检（类型不对、缺字段直接拦下并告诉你哪里违规），合格后帮你打好包（序列化成 JSON/dict）送到登机口。",
     "points": [
       "校验失败自动返回 422，错误信息精确到'哪个字段的哪个问题'",
       "instructor + Pydantic = LLM 结构化输出神器，比手写 JSON 解析稳",
       "Field(ge=0, le=100) 这类约束比 if 判断散落各处优雅得多"
     ],
+    "pitfalls": [
+      "字段约束全靠 if 散落各处——Field(ge=0, le=100) 声明式约束才是正道",
+      "把 Pydantic 模型当 ORM 模型用——它管数据校验不管数据库映射，别混为一谈",
+      "忽略 v1/v2 的兼容差异——.dict() 改名 .model_dump()，迁移时要全文检查"
+    ],
+    "applications": [
+      "FastAPI 请求/响应模型：自动校验 + 自动文档",
+      "LLM 结构化输出：response_model=ExtractedInfo，模型输出直接变对象，格式错自动重试",
+      "Agent 状态定义：TaskState 模型让状态可序列化、可校验",
+      "配置管理：BaseSettings 从环境变量加载并校验配置"
+    ],
     "example": {
       "scenario": "让 LLM 做信息抽取：定义 ExtractedInfo 模型（姓名、日期、金额带类型约束），instructor 强制模型按 schema 输出并自动解析成对象——字段缺失或类型错误会自动重试。",
       "code": "from pydantic import BaseModel, Field\nimport instructor\nfrom openai import OpenAI\n\nclass ExtractedInfo(BaseModel):\n    name: str = Field(description='付款人姓名')\n    amount: float = Field(ge=0, description='金额，单位元')\n    date: str = Field(pattern=r'\\d{4}-\\d{2}-\\d{2}',\n                      description='日期 YYYY-MM-DD')\n\nclient = instructor.from_openai(OpenAI())\n\ninfo = client.chat.completions.create(\n    model='gpt-4o-mini',\n    response_model=ExtractedInfo,          # 强制按schema输出+自动校验\n    messages=[{'role': 'user',\n               'content': '张伟在2024-05-01转账1500.5元'}],\n)\nprint(info.name, info.amount, info.date)   # 直接当对象用",
       "lang": "python"
     },
+    "related": [
+      "fastapi",
+      "json-schema-tools",
+      "function-calling"
+    ],
+    "extended": "进阶方向：instructor 库、v2 新特性（computed_field、 discriminated unions）、JSON Schema 导出",
     "image": "images/pydantic.png"
   },
   {
     "id": "asyncio",
     "category": "工程与后端",
     "name": "异步编程（asyncio）",
+    "summary": "单线程并发上千个 IO 任务的协程方案——批量调 LLM 的吞吐量神器。",
     "description": "Python 的协程并发方案：用 async/await 编写非阻塞代码，单线程内并发处理成百上千个 IO 任务。LLM 应用是典型的 IO 密集型（大部分时间在等模型/数据库返回），asyncio 让'等 A 的时间去发 B'，批量调用 LLM 的吞吐量可提升 10 倍以上。要点：用 asyncio.gather 并发、Semaphore 控制并发上限、CPU 密集任务交给进程池而不是硬塞协程。",
+    "background": "Python asyncio 自 3.5（2015）定型，早期生态碎片化（aiohttp/httpx、各种事件循环），直到 3.10+ 趋于成熟。LLM 应用给了它真正的舞台：模型调用是典型'等 30 秒返回'的 IO 任务，串行排队是浪费，asyncio 让等待时间重叠起来。2023 年后各 LLM SDK 原生提供 AsyncClient，异步成为 LLM 工程默认姿势。",
+    "problem": "解决'IO 等待浪费'的问题：500 篇文档各调一次 LLM，串行 2 秒/次要 16 分钟；协程并发 20 路，同样 2 秒/次的耗时重叠起来只要 2 分钟。模型 API 一次只处理一个请求的限制，被并发调用天然绕开。",
     "analogy": "一个前台同时接待 100 个客人：不是给每个客人配一个接待员（多进程），而是接待时把'等后厨'的客人先挂起，去招呼下一位——等待时间不浪费。",
     "points": [
       "阻塞库（requests、time.sleep）会卡死整个事件循环，要用 httpx/asyncio.sleep",
       "asyncio.gather(*tasks) 一行发起全部并发，结果按顺序返回",
       "打满上游限流：Semaphore(10) 限制同时最多 10 个在途请求"
     ],
+    "pitfalls": [
+      "在协程里用 requests——一个阻塞调用冻结整个事件循环，全服请求排队",
+      "无限制 gather——1000 个协程同时发请求，瞬间打爆上游限流，必须加 Semaphore",
+      "忘了 await——协程对象创建了没执行，bug 静默潜伏，开启调试模式能抓"
+    ],
+    "applications": [
+      "批量任务：评测集跑分、语料批量摘要、文档批量向量化",
+      "高并发服务：FastAPI + httpx.AsyncClient 支撑上百并发请求",
+      "多路检索并行：向量检索、BM25、重排同时发起再汇总",
+      "Agent 并行工具调用：查天气、查日历、查邮件一次并发发出"
+    ],
     "example": {
       "scenario": "给 500 篇文档生成摘要：串行每次 2 秒要 16 分钟；asyncio 并发 20 路，2 分钟跑完——模型 API 的响应时间没变，变的是'同时等'而不是'排队等'。",
       "code": "import asyncio, httpx\n\nasync def summarize(client, sem, text):\n    async with sem:                          # 并发上限=10\n        resp = await client.post(\n            'https://api.deepseek.com/v1/chat/completions',\n            headers={'Authorization': 'Bearer sk-xxx'},\n            json={'model': 'deepseek-chat',\n                  'messages': [{'role': 'user',\n                                'content': f'总结：{text}'}]})\n        return resp.json()['choices'][0]['message']['content']\n\nasync def main(texts):\n    sem = asyncio.Semaphore(10)\n    async with httpx.AsyncClient(timeout=60) as client:\n        results = await asyncio.gather(\n            *[summarize(client, sem, t) for t in texts])\n    return results\n\n# asyncio.run(main(documents))   # 500篇约2分钟跑完",
       "lang": "python"
     },
+    "related": [
+      "http-retry",
+      "fastapi",
+      "langchain"
+    ],
+    "extended": "进阶方向：httpx 异步客户端、asyncio.gather/as_completed 差异、任务取消与超时控制",
     "image": "images/asyncio.png"
   },
   {
     "id": "http-retry",
     "category": "工程与后端",
     "name": "HTTP 请求与重试",
+    "summary": "外部调用的保命三件套：超时、重试、指数退避——生产可用性的分水岭。",
     "description": "调用外部 API（LLM、工具、网页）的工程基本功：超时必须设置（不设等于允许永远挂起）、失败要重试（只重试幂等/临时性错误）、重试用指数退避（1s→2s→4s）加抖动（jitter）避免雪崩、429 限流要读 Retry-After 头。生产代码里'能一次成功'是幻觉，重试逻辑决定服务可用性。",
+    "background": "分布式系统经典理论（幂等性、退避算法）在 LLM 时代全面回归：模型 API 的 429 限流和偶发 5xx 是日常而非异常。Google SRE 的重试黄金法则（指数退避+抖动+预算上限）成为 LLM 工程标配。2023 年起各 SDK 内置自动重试，但'什么时候不该重试'（非幂等操作）依然要工程师自己判断。",
+    "problem": "解决'外部依赖不可靠但业务必须可靠'的矛盾：不设超时，一个挂起的请求拖死整个服务；不做重试，一次网络抖动就让用户看到报错；无脑密集重试，重试风暴把半死的服务彻底打死。三件套把'不稳定'驯服成'可控'。",
     "analogy": "快递没人收时的派件策略：不是连按 100 次门铃（密集重试），而是隔 1 小时、2 小时、4 小时各来一次（指数退避），且避开整点高峰（抖动）。",
     "points": [
       "timeout 必写：连接超时 + 读取超时，LLM 调用建议 60~120s",
       "只重试 429/5xx/网络错误；4xx 参数错误重试多少次都一样",
       "指数退避 + 随机抖动，防止服务恢复瞬间的重试风暴"
     ],
+    "pitfalls": [
+      "重试非幂等操作（下单、发消息）——网络超时时第一次可能已成功，重试造成重复下单，要加幂等键",
+      "退避不加抖动——服务恢复瞬间所有客户端同时重试，二次雪崩",
+      "超时只设总时长不区分阶段——连接超时（5s）和读超时（120s）要分开，LLM 调用读超时要放长"
+    ],
+    "applications": [
+      "LLM API 调用：429 读 Retry-After 等待，5xx 指数退避重试",
+      "工具调用链：Agent 调外部 API 全部包上超时和重试装饰器",
+      "批处理管道：向量化/评测任务的单条失败隔离重跑",
+      "Webhook 投递：回调失败按 1m/5m/30m 退避补投"
+    ],
     "example": {
       "scenario": "调用 LLM API 遇到 429 限流：读 Retry-After: 5 睡 5 秒重试；遇到 502 网关错误按 1s/2s/4s 退避重试 3 次；遇到 400 参数错误立即失败并记录，不浪费重试。",
       "code": "import httpx, random, time\n\ndef call_llm(messages, max_retry=3):\n    with httpx.Client(timeout=httpx.Timeout(120, connect=5)) as c:\n        for attempt in range(max_retry):\n            try:\n                r = c.post(API_URL, headers=HEADERS,\n                           json={'model': 'deepseek-chat',\n                                 'messages': messages})\n                if r.status_code == 429:               # 限流\n                    wait = int(r.headers.get('Retry-After', 5))\n                    time.sleep(wait)\n                    continue\n                r.raise_for_status()                   # 4xx/5xx抛异常\n                return r.json()\n            except (httpx.NetworkError, httpx.HTTPStatusError) as e:\n                if attempt == max_retry - 1:\n                    raise                               # 重试耗尽\n                backoff = 2 ** attempt + random.random()  # 退避+抖动\n                time.sleep(backoff)",
       "lang": "python"
     },
+    "related": [
+      "asyncio",
+      "fault-tolerance",
+      "loop-guard"
+    ],
+    "extended": "进阶方向：tenacity 重试库、幂等键设计、熔断器模式与重试的配合",
     "image": "images/http-retry.png"
   },
   {
     "id": "postgresql",
     "category": "工程与后端",
     "name": "PostgreSQL",
+    "summary": "LLM 应用的默认业务数据库：数据、向量（pgvector）、全文检索一个库全包。",
     "description": "最流行的开源关系型数据库，LLM 应用中的默认业务存储：用户、会话、订单、对话日志都存这里。对 AI 应用的两个加分项：pgvector 扩展让 PG 直接变身向量数据库（向量检索和业务数据同库同事务，小规模 RAG 不用再引入独立向量库）；全文检索（tsvector）可承担 BM25 关键词检索那一路。",
+    "background": "PostgreSQL 1996 年诞生于伯克利，以'最像学术研究却最可靠的数据库'著称，三十年稳居最受欢迎开源数据库。AI 时代的两个关键节点：pgvector（2021）让它直接支持向量检索，2023 年 RAG 热潮中'别急着上专用向量库，先看 pgvector'成为理性声音；2024 年 pgvector 0.7 支持 HNSW 索引后，中小规模 RAG 的默认答案越来越收敛于 PG。",
+    "problem": "解决'AI 应用数据存储碎片化'的问题：业务数据一个库、向量一个库、全文检索一个引擎，运维三套系统。PG 用一库三能力（关系+向量+全文）解决中小规模场景，事务一致性、权限、备份全部白送。",
     "analogy": "一间带保险柜的旗舰店：常规商品（业务数据）摆货架，向量这种贵重品放进自带的保险柜（pgvector）——不用为保险柜再租一间房（独立向量库）。",
     "points": [
       "中小规模 RAG 优先考虑 pgvector：少一个组件，事务一致性白送",
       "向量列必须建索引（HNSW/IVFFlat），否则是全表暴力扫描",
       "JSONB 类型适合存灵活的 agent 运行日志和工具参数"
     ],
+    "pitfalls": [
+      "pgvector 不建索引当普通列用——全表暴力扫描，数据过万就慢，必须建 HNSW/IVFFlat 索引",
+      "向量检索不配合元数据过滤——'只在本人权限内的文档里搜'要一条 SQL 完成，两个库反而难做",
+      "盲目上分布式/NewSQL——单机 PG 撑百万级 QPS 的读场景很常见，先测再扩"
+    ],
+    "applications": [
+      "对话记录与用户数据：所有业务实体的默认存储",
+      "中小 RAG 全家桶：pgvector 存文档向量，同库做权限过滤和审计",
+      "Agent 记忆存储：长期记忆结构化存 PG + 向量列做语义检索",
+      "调用日志分析：JSONB 存请求响应明细，SQL 直接分析 token 成本"
+    ],
     "example": {
       "scenario": "SaaS 客服系统：订单表、用户表、对话记录都在 PG；用 pgvector 存产品文档向量。用户问'我的订单 208 退款到账了吗'——一个 SQL 同时做订单精确查询和相似 FAQ 向量检索，且权限过滤天然打通。",
       "code": "-- 启用 pgvector 后，一张表同时存文档和向量\nCREATE EXTENSION IF NOT EXISTS vector;\n\nCREATE TABLE kb_chunks (\n    id       bigserial PRIMARY KEY,\n    content  text,\n    source   text,\n    acl      text DEFAULT 'all',      -- 权限过滤\n    embedding vector(1024)           -- bge-large-zh 输出1024维\n);\n\n-- HNSW 索引：余弦距离\nCREATE INDEX ON kb_chunks\n    USING hnsw (embedding vector_cosine_ops);\n\n-- 检索：语义相似 + 权限过滤 一步完成\nSELECT content, source,\n       embedding <=> $1 AS distance   -- $1 = 查询向量\nFROM kb_chunks\nWHERE acl = 'all'\nORDER BY embedding <=> $1\nLIMIT 5;",
       "lang": "python"
     },
+    "related": [
+      "vector-database",
+      "sqlalchemy",
+      "redis"
+    ],
+    "extended": "进阶方向：pgvector HNSW 调参、JSONB 索引、PG 16 逻辑复制与高可用",
     "image": "images/postgresql.png"
   },
   {
     "id": "redis",
     "category": "工程与后端",
     "name": "Redis",
+    "summary": "微秒级的内存数据结构服务器：缓存、限流、分布式锁三件套撑起 LLM 应用半边天。",
     "description": "内存键值数据库，读写微秒级，LLM 应用里的四大常用角色：缓存（相同问题的 embedding/回答直接复用，省钱提速）、对话状态的快速存取、限流计数器（按用户/按 key 统计调用次数）、分布式锁（防止多实例重复执行同一任务）。数据在内存里，重启易失，重要数据要开持久化或落库。",
+    "background": "Redis 2009 年诞生（Salvatore Sanfilippo），从'缓存'进化成'数据结构服务器'（字符串/哈希/集合/流/概率结构）。LLM 时代它的三个老技能被重新定价：embedding 缓存（省钱）、滑动窗口限流（护住 API 配额）、分布式锁（防重复执行）。2024 年许可证风波后，Valkey（Linux 基金会分叉）成为开源替代，协议和使用方式一致。",
+    "problem": "解决'快和贵之间的矛盾'：LLM 调用又慢又贵，但大量请求是重复的（'退货政策是什么'每天被问 500 次）。Redis 把重复请求的答案、embedding、会话状态放在内存里，微秒级返回，LLM 调用量直降七成。",
     "analogy": "收银台旁边的口香糖货架：最常拿的东西放在离手最近的地方（内存），拿取只要 1 秒；大仓库（数据库）虽然在，但为口香糖跑趟仓库就太慢了。",
     "points": [
       "缓存 embedding 结果：同一段文本不用反复花钱调 embedding API",
       "INCR + EXPIRE 两行实现滑动窗口限流，是 LLM 网关标配",
       "SET key value NX EX 30 一行实现分布式锁，防重复下单/重复回答"
     ],
+    "pitfalls": [
+      "重要数据只存 Redis 不落库——内存数据库重启/淘汰即丢，持久化配置和兜底落库要设计",
+      "缓存不设 TTL——知识库更新后旧答案永远命中，缓存失效策略要和内容更新节奏对齐",
+      "大 Key 化——把整个对话历史塞一个 String，读写阻塞，按消息粒度拆分"
+    ],
+    "applications": [
+      "语义/精确缓存：相同问题直接回缓存答案（配合 embedding 相似度做语义缓存）",
+      "API 限流：INCR+EXPIRE 两行实现'每用户每分钟 5 次'",
+      "分布式锁：多实例部署时防止同一任务被重复执行",
+      "会话与队列：短期对话状态存取、任务队列（Stream/List）"
+    ],
     "example": {
       "scenario": "客服系统：'退货政策是什么'每天被问 500 次。以问题 hash 为 key 缓存答案（TTL 1 小时），命中率 70%，LLM 调用量立减七成；再用 INCR 限制单用户每分钟最多 5 次提问防刷。",
       "code": "import redis, hashlib, json\n\nr = redis.Redis(host='localhost', decode_responses=True)\n\ndef answer_with_cache(question):\n    key = 'qa:' + hashlib.md5(question.encode()).hexdigest()\n    if cached := r.get(key):                 # 命中缓存直接返回\n        return json.loads(cached)\n\n    ans = expensive_llm_call(question)       # 未命中才调LLM\n    r.setex(key, 3600, json.dumps(ans))      # 缓存1小时\n    return ans\n\ndef rate_limit(user_id, limit=5, window=60):  # 滑动窗口限流\n    key = f'rl:{user_id}'\n    n = r.incr(key)\n    if n == 1:\n        r.expire(key, window)\n    return n <= limit                        # False=拒绝",
       "lang": "python"
     },
+    "related": [
+      "postgresql",
+      "http-retry",
+      "logging-monitoring"
+    ],
+    "extended": "进阶方向：语义缓存（GPTCache 思路）、Redis Stream 做任务队列、缓存穿透/雪崩防护",
     "image": "images/redis.png"
   },
   {
     "id": "sqlalchemy",
     "category": "工程与后端",
     "name": "SQLAlchemy",
+    "summary": "Python 的数据库翻译官：用类和对象操作表，换数据库不改业务代码。",
     "description": "Python 事实标准的 ORM 框架：用 Python 类定义表结构（模型），用链式方法代替手写 SQL 完成增删改查，同时保留写原生 SQL 的逃生通道。价值在于：数据库无关（开发用 SQLite 上线换 PG 基本不改代码）、防 SQL 注入（参数自动绑定）、配合 Alembic 做数据库迁移版本管理。",
+    "background": "SQLAlchemy 2006 年发布，近二十年稳居 Python ORM 事实标准。2.0 版（2023）带来现代化查询语法和完整类型提示。在 AI 项目里的价值被 pgvector 热潮放大：Python 应用操作'业务表+向量表'时，SQLAlchemy + Alembic（迁移）是默认组合，向量和业务数据在同一套 ORM 里管理。",
+    "problem": "解决'SQL 散落各处难以维护'的问题：手写 SQL 字符串有注入风险、无类型检查、换数据库要全文改写。ORM 把表映射成类、查询写成链式调用，数据库方言由引擎层消化，业务代码与数据库解耦。",
     "analogy": "翻译官：你用 Python 母语说需求（对象操作），它负责翻译成各地方言（PG/MySQL/SQLite 的 SQL），还能在有方言疑难杂症时让你直接说方言（原生 SQL）。",
     "points": [
       "2.0 风格：class User(Base) 声明模型 + select() 查询，类型提示友好",
       "会话（Session）即事务边界，with 语句自动提交/回滚",
       "复杂分析查询别硬写 ORM，直接 text() 原生 SQL 更清晰"
     ],
+    "pitfalls": [
+      "N+1 查询问题——循环里逐条查关联对象，100 条记录发出 101 条 SQL，用 selectinload 预加载",
+      "把 ORM 当万能——复杂分析查询硬写 ORM 可读性崩溃，text() 原生 SQL 是合法逃生通道",
+      "忘了关闭 Session——连接泄漏耗尽连接池，始终用 with Session(engine) 管理生命周期"
+    ],
+    "applications": [
+      "对话记录存储：Message 模型增删改查，会话历史持久化",
+      "评测与标注平台：评测集、标注结果、实验记录的元数据管理",
+      "向量+业务混合查询：文档表带向量列，权限过滤和相似检索一条语句",
+      "数据库迁移：Alembic 版本化管理 schema 变更，团队协作不炸库"
+    ],
     "example": {
       "scenario": "对话记录存储：Message 模型映射 messages 表，保存用户/助手消息一行代码；查某会话最近 10 条自动生成安全 SQL；换了数据库只改连接串。",
       "code": "from sqlalchemy import create_engine, String, select\nfrom sqlalchemy.orm import (DeclarativeBase, Mapped,\n                            mapped_column, Session)\nimport datetime as dt\n\nclass Base(DeclarativeBase): pass\n\nclass Message(Base):\n    __tablename__ = 'messages'\n    id: Mapped[int] = mapped_column(primary_key=True)\n    session_id: Mapped[str] = mapped_column(String(64), index=True)\n    role: Mapped[str] = mapped_column(String(16))\n    content: Mapped[str]\n    created_at: Mapped[dt.datetime] = \\\n        mapped_column(default=dt.datetime.utcnow)\n\nengine = create_engine('postgresql+psycopg://u:p@localhost/app')\nBase.metadata.create_all(engine)\n\nwith Session(engine) as s:                    # 2.0 风格查询\n    recent = s.execute(\n        select(Message)\n        .where(Message.session_id == 'sess_42')\n        .order_by(Message.created_at.desc())\n        .limit(10)).scalars().all()",
       "lang": "python"
     },
+    "related": [
+      "postgresql",
+      "pydantic",
+      "python-basics"
+    ],
+    "extended": "进阶方向：2.0 风格查询、异步 SQLAlchemy（与 FastAPI 配合）、Alembic 迁移工作流",
     "image": "images/sqlalchemy.png"
   },
   {
     "id": "docker",
     "category": "工程与后端",
     "name": "Docker",
+    "summary": "把'在我机器上能跑'变成'在哪都能跑'：应用+依赖打包成标准集装箱。",
     "description": "容器化工具，把应用和它的全部依赖（Python 版本、系统库、模型文件）打包成一个标准镜像，实现'在我机器上能跑'到'在任何机器上能跑'。LLM 应用尤其受益：torch 依赖巨大且版本敏感、向量库/Redis/应用多组件协作，用 docker-compose 一份 YAML 声明全部服务，一条命令拉起整套环境。",
+    "background": "Docker 2013 年发布，把 Linux 容器技术做成人人可用的工具，五年内重塑软件交付。AI 应用的容器化有特殊痛点：torch 镜像动辄 5-10GB、CUDA 驱动版本敏感、GPU 直通配置复杂。2023 年后 AI 项目标配 docker-compose：app + postgres(pgvector) + redis + 向量库一条命令拉起，新成员入职第一天就能跑全栈。",
+    "problem": "解决'环境不一致'的万恶之源：开发机 Python 3.12、服务器 3.9；本地有 ffmpeg、线上没有——'我本地是好的'成为经典甩锅语录。镜像把应用和全部依赖原子化打包，部署变成'拉镜像、跑容器'两个动作。",
     "analogy": "集装箱：货物（应用+依赖）不管发往哪个港口（开发机/测试/生产），集装箱内部布局完全一致，吊装（部署）方式也完全一致。",
     "points": [
       "Dockerfile 三段式：基础镜像 → 装依赖 → 拷代码，依赖层在前充分利用缓存",
       "多服务（app+postgres+redis+chroma）用 docker-compose 编排",
       "LLM 应用镜像是纯逻辑不含模型权重，模型走 API 或挂载卷"
     ],
+    "pitfalls": [
+      "镜像里塞模型权重——几个 GB 的权重让镜像不可维护，权重放卷挂载或对象存储，镜像只装逻辑",
+      "不写 .dockerignore——把 .git、venv、数据集全打进去，镜像膨胀到离谱",
+      "容器里数据不挂卷——容器删除数据即失，数据库和上传文件必须用 volume"
+    ],
+    "applications": [
+      "LLM 应用部署：FastAPI 服务 + 向量库 + 缓存的 compose 编排",
+      "本地开源模型：Ollama/vLLM 容器化运行，环境隔离不污染系统",
+      "代码执行沙箱：Agent 生成的代码扔进一次性容器里跑，安全隔离",
+      "CI/CD：构建镜像→推仓库→多环境一致性部署"
+    ],
     "example": {
       "scenario": "RAG 应用四个组件：FastAPI 应用、PostgreSQL(pgvector)、Redis、后台任务 worker。docker-compose up 一条命令在任何人机器上还原完整环境，新人入职当天即可开发。",
       "code": "# Dockerfile\nFROM python:3.12-slim\nWORKDIR /app\nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt\nCOPY . .\nCMD ['uvicorn', 'main:app', '--host', '0.0.0.0', '--port', '8000']\n\n# docker-compose.yml (示意)\n# services:\n#   app:    {build: ., ports: ['8000:8000']}\n#   db:     {image: pgvector/pgvector:pg16}\n#   redis:  {image: redis:7-alpine}\n# 一条命令拉起全部: docker compose up -d",
       "lang": "python"
     },
+    "related": [
+      "fastapi",
+      "postgresql",
+      "fault-tolerance"
+    ],
+    "extended": "进阶方向：多阶段构建瘦身、GPU 容器（nvidia-container-toolkit）、docker-compose 生产化",
     "image": "images/docker.png"
   },
   {
     "id": "logging-monitoring",
     "category": "工程与后端",
     "name": "日志与监控",
+    "summary": "LLM 应用的黑匣子+仪表盘：每一步可回放，成本延迟实时可见。",
     "description": "LLM 应用的可观测性建设。日志要记录：每轮对话的完整 messages、模型返回、工具调用参数与结果、token 用量和延迟——出问题时能完整回放现场。监控关注：错误率、P95 延迟、token 成本曲线、限流触发次数。专用工具（LangSmith、Langfuse）能可视化整条 Agent 链路的每一步，比裸日志好排查得多。",
+    "background": "可观测性（日志/指标/链路追踪）是云原生时代的成熟学科，LLM 应用在 2023 年遇到独特挑战：一次请求内部有'检索→重排→生成→工具调用'多段黑盒，传统 APM 看不透。于是垂直工具崛起：LangSmith（LangChain 系）、Langfuse（开源）、Phoenix 等，把每次调用的完整轨迹（trace）可视化，token 成本监控成为新仪表盘标配。",
+    "problem": "解决'AI 输出错了无从查起'的问题：用户投诉回答错误，没有轨迹日志时只能复现祈祷；有 trace 后 30 秒定位是检索没召回、重排排错序还是模型自由发挥。同时 token 成本、P95 延迟、错误率这些指标必须持续可见，否则成本失控和性能劣化都是静默发生。",
     "analogy": "飞机的黑匣子 + 仪表盘：黑匣子（结构化日志）事后还原每个操作细节，仪表盘（监控面板）实时告诉机长油量（成本）和引擎温度（错误率）。",
     "points": [
       "记录每次调用的 model、prompt_tokens、completion_tokens、latency——成本分析全靠这四个字段",
       "Agent 排查关键：把每步 Thought/Action/Observation 按序落盘，可回放",
       "给 trace_id 串起一次请求的所有日志，分布式排查必备"
     ],
+    "pitfalls": [
+      "只记最终答案不记中间过程——RAG 出错时无法区分是检索问题还是生成问题",
+      "日志不打 trace_id——微服务和多步链路无法串联，一次请求的日志散落各处",
+      "记录完整对话但不含敏感信息治理——用户隐私进日志系统要做脱敏，否则合规事故"
+    ],
+    "applications": [
+      "Agent 轨迹追踪：每步 Thought/Action/Observation 按序记录，回放定位决策错误",
+      "成本看板：按用户/功能/模型维度统计 token 消耗，异常突增告警",
+      "质量监控：线上抽样跑忠实度/相关性评分，劣化自动报警",
+      "A/B 实验：新旧 prompt/模型分流对比，指标说话"
+    ],
     "example": {
       "scenario": "用户投诉'AI 回答错了'：按 trace_id 捞出链路日志，发现检索阶段召回了过期文档（3 个月前的旧政策）——30 秒定位是 RAG 数据源问题而不是模型问题。没有日志这种问题要靠猜。",
       "code": "import logging, time, functools\n\nlogger = logging.getLogger('llm_app')\n\ndef log_llm_call(fn):\n    @functools.wraps(fn)\n    def wrapper(messages, **kw):\n        t0 = time.time()\n        try:\n            resp = fn(messages, **kw)\n            logger.info('llm_call', extra={\n                'trace_id': kw.get('trace_id'),\n                'model': kw.get('model'),\n                'prompt_tokens': resp.usage.prompt_tokens,\n                'completion_tokens': resp.usage.completion_tokens,\n                'latency_ms': int((time.time()-t0)*1000),\n            })\n            return resp\n        except Exception:\n            logger.exception('llm_call_failed', extra={\n                'trace_id': kw.get('trace_id')})\n            raise\n    return wrapper",
       "lang": "python"
     },
+    "related": [
+      "rag-evaluation",
+      "http-retry",
+      "evaluation-metrics"
+    ],
+    "extended": "进阶方向：Langfuse/LangSmith 实操、OpenTelemetry 接入 LLM SDK、成本告警策略",
     "image": "images/logging-monitoring.png"
   },
   {
     "id": "fault-tolerance",
     "category": "工程与后端",
     "name": "容错与降级",
+    "summary": "系统出事时的应急预案：重试→熔断→降级→兜底，保住'永远有响应'。",
     "description": "让系统在依赖（模型 API、工具、数据库）出故障时仍能提供可用服务的设计。分层手段：重试（临时故障）、超时熔断（依赖持续失败就暂停调用，防止雪崩）、降级（换备用模型、返回缓存答案、返回'暂时繁忙'）、兜底（人工接管）。LLM 应用还要额外考虑模型 API 限流和单点依赖：主模型挂了必须有 Plan B。",
+    "background": "容错设计是分布式系统老学科（熔断器模式 2011 年由 Netflix Hystrix 普及），LLM 应用让它迎来第二春：模型 API 是新的'最不可靠依赖'——限流、超时、区域性故障是常态。2024 年初 OpenAI 数小时级故障让全行业见识到单点依赖的脆弱，'主备模型+降级链'从最佳实践变成生存必需。",
+    "problem": "解决'依赖挂了我也挂'的级联失败问题：重试解决瞬时抖动，熔断防止对半死依赖持续施压，降级保证核心功能可用（换备用模型/返回缓存），兜底（转人工/友好提示）守住最后底线。目标是故障时'体验降级但服务不中断'。",
     "analogy": "航班取消后的应急预案：先改签同航空公司（重试），不行换其他航司（备用模型），再不行先安排住宿并通知旅客（降级话术），绝不让旅客滞留机场（服务完全中断）。",
     "points": [
       "熔断器三态：关闭（正常）→ 打开（连续失败N次停止调用）→ 半开（试探恢复）",
       "降级不是摆烂：备用小模型回答 + 注明'非完整回答'仍是有效服务",
       "关键路径的每个外部依赖都要回答'它挂了怎么办'这个问题"
     ],
+    "pitfalls": [
+      "备用模型和主模型共用同一个供应商——机房级故障一起挂，主备要跨供应商",
+      "降级了不告知用户——'当前为简化回答模式'的提示是诚实，静默降级是埋雷",
+      "熔断阈值拍脑袋——太敏感频繁误熔断，太迟钝失去保护，按依赖的实际 SLA 校准"
+    ],
+    "applications": [
+      "模型双活：主 GPT-4o 故障自动切 DeepSeek，响应头标注降级模式",
+      "熔断器：连续 5 次失败暂停调用 30 秒，期间直接走备用路径",
+      "RAG 降级链：向量库挂了退关键词检索，检索全挂返回 FAQ 缓存",
+      "Agent 工具容错：单个工具失败不炸整个任务，标记后跳过或换路"
+    ],
     "example": {
       "scenario": "主模型 GPT-4o 连续失败：熔断器打开 30 秒内不再请求它，流量切到 DeepSeek（备用），同时在响应头标注 degraded=true；期间返回的答案带'当前为简化回答模式'提示，服务零中断。",
       "code": "import time\n\nclass CircuitBreaker:\n    def __init__(self, fail_limit=5, cooldown=30):\n        self.fails, self.fail_limit = 0, fail_limit\n        self.cooldown, self.opened_at = cooldown, 0\n\n    @property\n    def open(self):\n        if self.fails < self.fail_limit:\n            return False\n        if time.time() - self.opened_at > self.cooldown:\n            self.fails = 0          # 半开：放行试探\n            return False\n        return True\n\nbreaker = CircuitBreaker()\n\ndef chat_with_fallback(messages):\n    if not breaker.open:\n        try:\n            return primary_llm(messages)      # 主模型\n        except Exception:\n            breaker.fails += 1\n            breaker.opened_at = time.time()\n    return fallback_llm(messages)             # 降级: 备用模型",
       "lang": "python"
     },
+    "related": [
+      "http-retry",
+      "loop-guard",
+      "logging-monitoring"
+    ],
+    "extended": "进阶方向：熔断器三态机实现、跨供应商模型路由（LiteLLM Router）、混沌工程演练",
     "image": "images/fault-tolerance.png"
   },
   {
     "id": "spring-boot",
     "category": "Java 相关",
     "name": "Spring Boot",
+    "summary": "Java 业务中台的发动机：AI 架构里管鉴权、订单、流程，把'传话'给模型服务。",
     "description": "Java 生态最主流的 Web 框架，注解驱动、约定优于配置，几行注解就能发布 REST API。在 AI 项目架构里，Java 服务常承担业务中台角色：用户鉴权、订单流程、权限校验，通过 HTTP 调用 Python 的模型服务（LLM 网关、RAG 服务）。Java 侧管业务正确性，Python 侧管模型智能，各用最顺手的语言。",
+    "background": "Spring 框架 2002 年诞生，Spring Boot（2014）用'约定优于配置'把 Java Web 开发从 XML 地狱中解放出来，成为企业级 Java 事实标准。AI 时代它没有退场，而是找到新定位：大企业的存量系统（用户、订单、权限）几乎都是 Java 写的，AI 能力作为新模块嵌入时，Java 侧负责业务正确性和数据权限，通过 HTTP 调用 Python 模型服务——'Java 管事、Python 管智能'成为混合架构主流。",
+    "problem": "解决'AI 能力如何安全地嵌入企业既有系统'的问题：AI 直接操作业务数据库太危险，必须经过业务层的鉴权、校验、审计。Spring Boot 承担这个'守门员'角色：谁能调 AI、AI 结果能否执行业务操作，都在 Java 侧把关。",
     "analogy": "连锁餐厅的分工：前厅（Java/Spring Boot）管点单、收银、会员卡，后厨（Python 模型服务）管炒菜——前厅不需要会炒菜，只需要会准确地传菜。",
     "points": [
       "@RestController + @PostMapping 几行注解即发布接口",
       "调用 Python 服务用 Feign/WebClient，要做好超时和重试",
       "Java 侧不要直接塞 prompt 逻辑，保持'传话筒'角色，prompt 治理留在模型服务"
     ],
+    "pitfalls": [
+      "Java 侧堆 prompt 逻辑——prompt 散落在 Java 字符串里无法版本化管理，prompt 治理应留在模型服务",
+      "调用模型服务没设超时——LLM 响应 30 秒起步，默认超时直接误杀，Java 侧超时要按 LLM 特性配置",
+      "把 AI 返回当可信输入直接入库执行——AI 可能出错，业务动作前要有校验或人工确认环节"
+    ],
+    "applications": [
+      "客服系统后端：Spring Boot 管用户会话与权限，转发问题给 Python RAG 服务",
+      "AI 能力网关：给全公司业务线提供统一的大模型调用入口，含计费与审计",
+      "智能审批流：审批规则引擎 + AI 辅助意见，流程控制在 Java 侧",
+      "数据中台 + AI：存量 Java 微服务加'智能问答'模块，最小侵入升级"
+    ],
     "example": {
       "scenario": "电商客服架构：Spring Boot 处理用户登录、查询订单（数据库在 Java 侧），把'订单状态+用户问题'POST 给 Python 的 RAG 服务，拿到答案后返回给前端——权限和数据全部在 Java 侧把控。",
       "code": "@RestController\n@RequestMapping(\"/api/chat\")\npublic class ChatController {\n\n    private final RagClient ragClient;      // Feign 指向Python服务\n\n    public ChatController(RagClient ragClient) {\n        this.ragClient = ragClient;\n    }\n\n    @PostMapping\n    public ChatResp chat(@RequestBody ChatReq req,\n                         @AuthenticationPrincipal User user) {\n        // Java侧: 鉴权 + 组装业务上下文\n        Order order = orderService.currentOrder(user.getId());\n        return ragClient.ask(new RagReq(\n            req.question(),\n            user.getId(),\n            order == null ? null : order.id()));   // 转发给模型服务\n    }\n}",
       "lang": "java"
     },
+    "related": [
+      "feign-resttemplate",
+      "java-concurrency",
+      "project-architecture"
+    ],
+    "extended": "进阶方向：Spring AI 框架（Java 版 LangChain）、Spring Cloud 与模型网关集成、Resilience4j 熔断",
     "image": "images/spring-boot.png"
   },
   {
     "id": "feign-resttemplate",
     "category": "Java 相关",
     "name": "Feign / RestTemplate",
+    "summary": "Java 调 Python 模型服务的桥梁：声明式接口像调本地方法一样调远程 AI。",
     "description": "Java 服务间 HTTP 调用的两种方式。RestTemplate 是经典同步客户端（现已进入维护模式，新项目推荐 WebClient）；Feign 是声明式客户端——写一个接口加注解，框架自动生成 HTTP 调用实现，与 Spring Cloud 生态集成后有负载均衡、熔断降级。在 AI 架构里它们是 Java 业务层调用 Python 模型服务的桥梁。",
+    "background": "RestTemplate 是 Spring 早期的同步 HTTP 客户端（2009 年起），简单直接但配置繁琐，现已进入维护模式；Feign 由 Netflix 2012 年开源，走'声明式'路线——写个接口加注解，框架自动生成 HTTP 调用实现。Spring Cloud 生态收编后与负载均衡、熔断器无缝集成。新项目推荐 OpenFeign 或 WebClient（响应式），RestTemplate 留在存量代码里。",
+    "problem": "解决'Java 业务层调用 Python 模型服务的工程规范'问题：手写 HTTP 调用代码重复、错误处理散乱。声明式客户端把'调远程 AI 服务'变成调一个接口方法，超时、重试、熔断统一配置，跨语言协作的脏活被框架吸收。",
     "analogy": "RestTemplate 是自己打电话逐句沟通，Feign 是雇了个专职翻译：你只管说中文（写接口定义），翻译自动完成拨打、传话、记录全过程。",
     "points": [
       "Feign 声明式接口让'调用远程服务'像调用本地方法一样自然",
       "调用模型服务必须配置超时（LLM 响应慢，默认超时会误杀）",
       "配合 Resilience4j 给调用加熔断，Python 服务挂了 Java 侧也能兜底"
     ],
+    "pitfalls": [
+      "沿用默认 5 秒读超时调 LLM——长回答必然超时，必须按模型服务特性放长到 60-120 秒",
+      "Feign 接口不做降级——模型服务一挂，Java 业务全线报错，要配 fallback 类返回兜底响应",
+      "传输大上下文不压缩——整段对话历史 POST 过去，带宽和延迟双输，JSON 压缩 + 分页传历史"
+    ],
+    "applications": [
+      "Java 订单服务调 Python RAG 服务：Feign 接口定义 ask 方法，60 秒读超时适配 LLM 慢响应",
+      "多实例模型服务负载均衡：Feign + 注册中心把请求分发到多个 GPU 实例",
+      "熔断兜底：模型服务连续失败时 Resilience4j 熔断，Java 侧返回降级话术",
+      "内部微服务互调：非 AI 的存量服务间调用同样适用，团队心智统一"
+    ],
     "example": {
       "scenario": "Java 订单服务调用 Python RAG 服务：Feign 接口定义一个 ask 方法，注解声明目标服务名和路径，调用时自动负载均衡到多个模型服务实例，超时 60 秒（LLM 特性）。",
       "code": "@FeignClient(name = \"rag-service\",\n             url = \"${rag.service.url}\",\n             configuration = RagFeignConfig.class)\npublic interface RagClient {\n\n    @PostMapping(\"/ask\")\n    RagResp ask(@RequestBody RagReq req);\n}\n\n// 超时配置 (application.yml)\n// spring:\n//   cloud:\n//     openfeign:\n//       client:\n//         config:\n//           rag-service:\n//             connect-timeout: 3000\n//             read-timeout: 60000   # LLM响应慢，必须放长",
       "lang": "java"
     },
+    "related": [
+      "spring-boot",
+      "http-retry",
+      "fault-tolerance"
+    ],
+    "extended": "进阶方向：OpenFeign + Resilience4j 实操、WebClient 响应式调用、SSE 流式转发（Java 侧透传 token 流）",
     "image": "images/feign-resttemplate.png"
   },
   {
     "id": "jvm-memory",
     "category": "Java 相关",
     "name": "JVM 内存模型",
+    "summary": "Java 的内存分区与回收机制：读懂 OOM/栈溢出/元空间溢出，才能给 AI 网关调好堆。",
     "description": "Java 运行时的内存分区：堆（对象实例，GC 主战场，分新生代/老年代）、虚拟机栈（方法调用的局部变量与栈帧）、方法区/元空间（类元信息）、程序计数器、本地方法栈。理解内存模型才能解释 OOM（堆溢出）、StackOverflow（栈溢出）、元空间溢出的区别，并为 Java 业务服务调优堆大小——尤其当它要缓存大量对话上下文时。",
+    "background": "JVM 内存模型随 Java 1.2（1998）的分代收集确立：新生代/老年代的分代假设来自'对象大多朝生夕死'的统计规律。2018 年后元空间取代永久代、G1 成为默认收集器、ZGC 把停顿压到毫秒级。对 AI 项目：Java 网关若缓存大量对话上下文或大 JSON，堆行为直接影响服务稳定性——内存泄漏成为 AI 网关 OOM 的头号原因。",
+    "problem": "解决'Java 服务为什么莫名卡死/崩溃'的问题：OOM（堆装不下）、StackOverflow（调用太深）、元空间溢出（类加载过多）是三种不同病，药方完全不同。读懂内存分区才能对症：调堆大小、查泄漏、还是改代码结构。",
     "analogy": "餐厅的分区管理：后厨操作台（堆）放所有食材半成品（对象），面积最大且要定期大扫除（GC）；每个厨师的案板（栈）很小，只放当前正在切的菜（局部变量），做完就撤。",
     "points": [
       "OOM: heap space = 堆装不下新对象；GC overhead limit = GC 吃满 CPU",
       "StackOverflowError = 调用链太深（常见于无限递归），与堆无关",
       "Java 服务只做业务转发时堆不用大；缓存对话历史要估算对象大小并设上限"
     ],
+    "pitfalls": [
+      "OOM 就加大堆——如果是内存泄漏，堆再大也只是推迟崩溃，先做堆转储分析找泄漏点",
+      "把 StackOverflowError 当内存不足——它是调用栈问题（常见无限递归），加堆毫无作用",
+      "缓存无上限——对话历史、模型响应缓存必须配容量上限和淘汰策略（LRU），否则必然 OOM"
+    ],
+    "applications": [
+      "AI 网关容量规划：按 QPS 和平均上下文大小估算堆需求，设置 -Xms/-Xmx",
+      "对话缓存泄漏排查：堆转储（heap dump）分析发现会话 Map 无限增长",
+      "大响应处理优化：流式解析模型返回，避免整包 JSON 读进堆",
+      "GC 调优：P95 延迟抖动定位到 Full GC 频繁，换 G1/ZGC 并调分区"
+    ],
     "example": {
       "scenario": "Java 网关把每个会话的完整历史缓存在内存 Map 里，10 万活跃会话后 OOM。修复：对话历史移到 Redis，Java 侧只留 LRU 缓存最近 1000 个会话，堆从 8G 降到 2G。",
       "code": "// 启动参数与内存诊断\n// java -Xms2g -Xmx2g -XX:MaxMetaspaceSize=256m -jar app.jar\n\nMap<Long, Conversation> cache = Caffeine.newBuilder()\n    .maximumWeight(1000)                 // 最多缓存1000个会话\n    .weigher((k, v) -> 1)\n    .expireAfterAccess(10, TimeUnit.MINUTES)\n    .build();\n\n// OOM 排查: 拿堆转储看谁占内存\n// -XX:+HeapDumpOnOutOfMemoryError\n// -XX:HeapDumpPath=/dump/\n// jmap -heap <pid>  或  jcmd <pid> GC.heap_info",
       "lang": "java"
     },
+    "related": [
+      "spring-boot",
+      "logging-monitoring",
+      "java-concurrency"
+    ],
+    "extended": "进阶方向：G1/ZGC 收集器、jmap/jcmd/MAT 堆分析、-XX:+HeapDumpOnOutOfMemoryError 实战",
     "image": "images/jvm-memory.png"
   },
   {
     "id": "hashmap",
     "category": "Java 相关",
     "name": "HashMap 原理",
+    "summary": "Java 最高频的数据结构：数组+链表/红黑树，也是面试和线上事故的双料明星。",
     "description": "Java 最常用的哈希表实现：底层是数组 + 链表/红黑树。put 时对 key 的 hashCode 扰动后按数组长度取模定位桶；JDK 8 起链表长度超过 8 且数组长度 ≥64 时转红黑树，查询从 O(n) 降到 O(log n)；默认负载因子 0.75，元素数超过 容量×0.75 触发扩容（翻倍并 rehash）。高频面试题，也是理解'为什么 key 要正确实现 hashCode/equals'的关键。",
+    "background": "HashMap 从 Java 1.2 就存在，JDK 8（2014）是一次大改：链表过长（≥8 且数组 ≥64）转红黑树，把最坏查询从 O(n) 拉回 O(log n)；插入从头插法改尾插法修复了并发扩容死循环的经典 bug。它承载了哈希表理论的全部知识点（扰动函数、负载因子、扩容 rehash），是理解'hashCode/equals 契约'的最佳教材。",
+    "problem": "解决'键值对的快速存取'问题：O(1) 平均读写让它成为缓存、计数、索引的默认选择。理解其原理才能避开两类线上事故：自定义 key 不实现 hashCode/equals 导致'存进去取不出来'；并发使用导致数据丢失（该用 ConcurrentHashMap）。",
     "analogy": "图书馆按书名首字母分区的书架（桶）：报书名先算首字母定位书架（hash），再在架内逐本找（链表）；某书架书太多时，改成按字典序精排的二分查找（红黑树）。",
     "points": [
       "key 必须同时正确实现 hashCode 和 equals，否则 get 不到 put 进的值",
       "线程不安全：并发 put 会丢数据，多线程场景用 ConcurrentHashMap",
       "预估容量用 new HashMap<>(expectedSize / 0.75 + 1) 避免 rehash"
     ],
+    "pitfalls": [
+      "多线程直接用 HashMap——并发 put 丢数据（JDK7 还会死循环），并发场景必须 ConcurrentHashMap",
+      "可变对象当 key——key 的字段被修改后 hashCode 变了，这条记录永远取不出来",
+      "不预估容量——百万级数据边插边扩容 rehash，一次性 new HashMap<>(预期容量) 省一大截"
+    ],
+    "applications": [
+      "会话/上下文缓存：sessionId → Conversation 的内存缓存（配 LRU 上限）",
+      "计数统计：日志分析、词频统计、API 调用计数",
+      "配置索引：把规则列表预处理成 Map 实现秒级查找",
+      "面试必考：扩容机制、红黑树转换、线程安全是高频考点"
+    ],
     "example": {
       "scenario": "统计 100 万条对话日志中每个用户的消息数：HashMap<userId, count>。若 userId 是没重写 hashCode 的对象，同一个用户会被散到不同桶里统计出重复条目——这就是为什么自定义 key 必须实现 hashCode/equals。",
       "code": "Map<String, Integer> counter = new HashMap<>(1_000_000 / 0.75 + 1);\nfor (LogEntry log : logs) {\n    counter.merge(log.userId, 1, Integer::sum);\n}\n\n// JDK8+ 的另一写法\nMap<String, List<LogEntry>> byUser = logs.stream()\n    .collect(Collectors.groupingBy(LogEntry::userId));\n\n// 多线程统计用:\nConcurrentHashMap<String, Integer> safeCounter =\n    new ConcurrentHashMap<>();",
       "lang": "java"
     },
+    "related": [
+      "java-concurrency",
+      "jvm-memory",
+      "redis"
+    ],
+    "extended": "进阶方向：ConcurrentHashMap 的 CAS+分段设计、LinkedHashMap 实现 LRU、扰动函数为什么右移 16 位异或",
     "image": "images/hashmap.png"
   },
   {
     "id": "java-concurrency",
     "category": "Java 相关",
     "name": "Java 多线程",
+    "summary": "Java 并发工具箱：线程池、锁、并发集合、CompletableFuture——AI 网关并发调用的基本功。",
     "description": "Java 并发编程体系：线程池（ExecutorService，复用线程避免频繁创建销毁）、synchronized（方法/代码块级别的互斥锁）、volatile（保证变量可见性但不保证原子性）、并发工具类（CountDownLatch、Semaphore、ConcurrentHashMap、CompletableFuture）。在 AI 架构中，Java 网关常需要并发调用多个下游服务（模型服务、订单服务）再汇总——CompletableFuture 是标准做法。",
+    "background": "Java 从 1.0 就内建线程，Java 5（2004）的 java.util.concurrent 是里程碑（线程池、并发集合、锁框架），Java 8 的 CompletableFuture 补上函数式异步编排。在 AI 架构里它有具体用武之地：Java 网关一次请求要并发调模型服务、订单服务、用户服务再汇总——CompletableFuture.allOf 是标准姿势，线程池参数则直接决定网关的吞吐和稳定性。",
+    "problem": "解决'多任务并行与共享资源安全'的问题：串行调用三个下游要 9 秒，并发只要最慢的 3 秒；但并发又带来共享状态竞争——锁、原子类、并发集合就是让'快'和'对'同时成立的工具箱。",
     "analogy": "餐厅高峰期的排班：线程池是固定编制的厨师团队（忙时排队不临时招人），synchronized 是后厨唯一的那把菜刀（一次只能一人用），CompletableFuture 是让凉菜和热菜同时开工、上齐了再端桌。",
     "points": [
       "禁用 Executors.newFixedThreadPool 默认工厂：无界队列会 OOM，手动 new ThreadPoolExecutor 明确参数",
       "volatile 适用'一写多读'状态标志；计数递增要用 AtomicInteger",
       "并发调下游用 CompletableFuture.allOf，任一失败要有兜底"
     ],
+    "pitfalls": [
+      "用 Executors.newFixedThreadPool 直接创建——无界队列堆积任务导致 OOM，手动 new ThreadPoolExecutor 明确队列上限和拒绝策略",
+      "synchronized 包大段代码——锁粒度太粗吞吐骤降，能用并发集合/原子类就别用锁",
+      "CompletableFuture 默认线程池是 ForkJoinPool.commonPool——被其他任务占满时饿死，要显式传自定义线程池"
+    ],
+    "applications": [
+      "网关并行下游调用：用户信息、AI 答案、订单状态三路并发再汇总",
+      "批量任务处理：万级消息并发调分类接口，线程池控制并发度",
+      "限流与隔离：不同下游用独立线程池，一个服务拖死不波及其他（舱壁模式）",
+      "定时与延迟任务：ScheduledThreadPoolExecutor 驱动周期性数据同步"
+    ],
     "example": {
       "scenario": "客服页面一次请求需要三路数据：用户信息（数据库）、AI 答案（Python 模型服务，慢）、订单状态（订单服务）。三路并发执行总耗时 = 最慢一路（模型 3 秒），串行则要 5 秒。",
       "code": "ExecutorService pool = new ThreadPoolExecutor(\n    8, 16, 60, TimeUnit.SECONDS,\n    new ArrayBlockingQueue<>(100),\n    new ThreadPoolExecutor.CallerRunsPolicy());  // 队列满由调用者执行\n\nCompletableFuture<User> userF =\n    CompletableFuture.supplyAsync(() -> userService.get(uid), pool);\nCompletableFuture<String> aiF =\n    CompletableFuture.supplyAsync(() -> ragClient.ask(q), pool)\n        .completeOnTimeout(RagResp.degraded(), 60, TimeUnit.SECONDS)\n        .exceptionally(e -> RagResp.fallback());       // 模型服务兜底\nCompletableFuture<Order> orderF =\n    CompletableFuture.supplyAsync(() -> orderService.current(uid), pool);\n\nCompletableFuture.allOf(userF, aiF, orderF).join();   // 三路汇合\nreturn new ChatPage(userF.join(), aiF.join(), orderF.join());",
       "lang": "java"
     },
+    "related": [
+      "spring-boot",
+      "jvm-memory",
+      "asyncio"
+    ],
+    "extended": "进阶方向：CompletableFuture 编排全解、虚拟线程（Java 21，IO 密集新解法）、线程池参数压测方法",
     "image": "images/java-concurrency.png"
   },
   {
     "id": "kb-qa-agent",
     "category": "项目实战概念",
     "name": "智能知识库问答 Agent",
+    "summary": "企业 LLM 落地第一课：知识库问答 Agent——RAG、工具、记忆的综合试金石。",
     "description": "RAG + 工具调用 + 记忆的典型综合应用：用户上传文档建知识库，Agent 接收问题后先意图分类（闲聊/检索类/操作类），检索类问题走向量检索 + 重排 + 生成并强制引用来源，操作类问题（'帮我建个工单'）走 Function Calling，多轮对话带指代消解和对话记忆。它是绝大多数企业 LLM 落地的第一个项目，也是检验 RAG 各环节知识是否掌握的试金石。",
+    "background": "知识库问答是 2023 年以来企业落地最多、踩坑最全的 LLM 应用形态，几乎每家企业的 AI 转型都从它开始。它也是最好的学习载体：一个完整实现要调动 RAG 全链路（解析→分块→检索→重排→生成）、意图路由、工具调用、记忆管理、评测体系——等于把大半张概念图实操一遍。",
+    "problem": "解决'企业知识锁在文档里，员工找不到也问不动'的问题：新员工问'报销发票丢了怎么办'，翻 200 页手册要 20 分钟；百度搜不到内部制度；直接问大模型它会编。知识库 Agent 让'提问→秒答→带引用'成为现实，还能顺手办业务（建工单、查进度）。",
     "analogy": "一个坐镇资料室的专业客服：既能翻资料精确回答（RAG），又能替你去系统里办业务（工具调用），还记得你前面说过什么（记忆），答不上来时老实说不知道并转人工（兜底）。",
     "points": [
       "架构三件套：意图路由 + RAG 检索链 + 工具调用，缺一不可",
       "必须实现'引用来源'和'检索不到就承认'，这是可信度底线",
       "评测集先行：30 条真实问答做回归，任何改动前后跑一遍"
     ],
+    "pitfalls": [
+      "一步到位想做大——先做纯检索问答跑通全链路，再逐步加工具、记忆、多轮，每步都有评测",
+      "忽视'检索不到'场景——没有兜底话术和转人工机制，模型硬编一次就毁掉用户信任",
+      "上线后不看指标——转人工率、重复提问率是效果晴雨表，不看数据无法迭代"
+    ],
+    "applications": [
+      "HR/IT/财务制度问答：制度文档问答 + '如何办理'引导 + 转人工兜底",
+      "产品支持：手册问答 + 查订单/报修等工具操作二合一",
+      "售前机器人：产品参数问答 + 留资卡片，挂在官网/小程序",
+      "内部 IT 自助：密码重置、权限申请等高频操作的自动办理"
+    ],
     "example": {
       "scenario": "员工问'报销发票丢失怎么办'→意图分类为检索类→向量检索命中《财务制度》第 14 条→生成带 [来源:财务制度#14] 的答案。换员工问'帮我把上个月的差旅报销单提交了'→意图为操作类→调用 submit_expense 工具并请用户确认金额。",
       "code": "def kb_agent(question, user, history):\n    intent = llm_classify(question, labels=['闲聊', '检索', '操作'])\n\n    if intent == '闲聊':\n        return llm_chat(history, question)\n\n    if intent == '检索':\n        query = rewrite(question, history)        # 指代消解\n        docs = hybrid_search(query, top_k=30)     # 混合召回\n        docs = rerank(query, docs, top_n=5)       # 精排\n        if rerank_score(docs[0]) < 0.3:           # 兜底\n            return '知识库中没有找到相关信息，已为您转人工。'\n        return generate_with_citation(query, docs)  # 带引用生成\n\n    return execute_tool_flow(question, user)      # 操作类走工具",
       "lang": "python"
     },
+    "related": [
+      "rag",
+      "react-loop",
+      "rag-evaluation",
+      "tool-use"
+    ],
+    "extended": "进阶方向：意图路由设计、多轮指代消解、引用溯源 UI、知识库运营（文档保鲜机制）",
     "image": "images/kb-qa-agent.png"
   },
   {
     "id": "workflow-agent",
     "category": "项目实战概念",
     "name": "自动化工作流 Agent",
+    "summary": "多步骤流程自动化 Agent：查数据→写报告→发通知，定时跑、可恢复、有人审。",
     "description": "面向'多步骤流程自动化'的 Agent 形态：接收一个复合目标（'查明天的天气并写进晨会纪要发给团队'），由 Agent 规划步骤、依次调用多个工具、处理步骤间的数据传递，最终完成整个流程。与知识库 Agent 的区别：重心从'检索生成'转向'任务编排与执行'，需要更强的规划、状态管理和失败恢复能力。典型场景：日报生成、数据巡检、邮件分类处理、定时报告。",
+    "background": "自动化工作流从 CRON + 脚本时代走到 RPA（模拟人点鼠标），2023 年后进化为'LLM Agent 工作流'：流程编排靠状态机，环节执行靠 LLM+工具，弹性处理非结构化输入。与知识库 Agent（被动应答）相对，它主动定时或事件触发，是'数字员工'形态的核心。代表产品：各类'日报 Agent''监控 Agent''邮件助手'。",
+    "problem": "解决'规则脚本搞不定的半结构化流程'问题：传统脚本处理不了'总结竞品官网更新要点'这种需要理解力的环节，RPA 脆弱到改个按钮就崩。LLM Agent 工作流在流程确定性（状态机）和环节智能性（LLM）之间取得平衡。",
     "analogy": "一个能干的行政专员：你说'把明早的事安排好'，TA 自己查天气决定要不要提醒带伞、把昨天的销售数据做成表格、写好晨会邮件定时发送——你只看结果。",
     "points": [
       "每个步骤的产物要结构化传递（JSON），不要靠自由文本接力",
       "有外部副作用的步骤（发邮件、下单）必须设人工确认卡点",
       "流程要支持幂等重跑：任何一步失败，重跑不会造成重复副作用"
     ],
+    "pitfalls": [
+      "无人工确认的对外副作用——自动发邮件/通知必须有审批卡点，发错群是事故",
+      "不幂等——重跑一遍又发一次通知、写一批重复数据，每步要有幂等键（按日期 upsert）",
+      "失败静默——定时任务挂了没人知道，失败告警和重试策略是标配"
+    ],
+    "applications": [
+      "每日竞品监控：爬官网→diff 变化→LLM 摘要→写表格→重大更新发通知",
+      "自动化日报/周报：拉业务数据→分析趋势→生成 Markdown 报告→定时推送",
+      "邮件分拣：收件箱分类→紧急事项提醒→常规事项归档→草拟回复",
+      "数据巡检：定时查数据质量→异常检测→生成巡检报告→派发工单"
+    ],
     "example": {
       "scenario": "每日竞品监控 Agent（定时触发）：① 爬取 3 个竞品官网更新 ② diff 出新增功能 ③ 调用 LLM 生成中文摘要 ④ 写入飞书表格 ⑤ 有重大更新时发群通知（此处人工确认后发送）——全自动跑了一个季度，漏报 1 次。",
       "code": "def daily_monitor():\n    state = TaskState(goal='竞品监控日报')\n    steps = [\n        ('fetch',  crawl_competitors),      # 抓取官网\n        ('diff',   diff_changes),           # 对比昨日快照\n        ('summarize', llm_summarize),       # 生成摘要\n        ('write',  push_to_feishu_sheet),   # 写表格(幂等:按日期upsert)\n    ]\n    for name, fn in steps:\n        if name in state.done_steps:        # 断点续跑: 跳过已完成\n            continue\n        state.artifacts[name] = fn(state)\n        state.done_steps.append(name)\n        state.save()                        # 每步落盘\n\n    if has_major_update(state):             # 有副作用 -> 人工确认\n        notify_human_for_approval(state)",
       "lang": "python"
     },
+    "related": [
+      "planning",
+      "working-memory",
+      "langgraph",
+      "loop-guard"
+    ],
+    "extended": "进阶方向：状态机编排（LangGraph/Temporal）、幂等与断点续跑设计、触发器体系（定时/事件/人工）",
     "image": "images/workflow-agent.png"
   },
   {
     "id": "project-architecture",
     "category": "项目实战概念",
     "name": "项目架构设计",
+    "summary": "LLM 应用的骨架设计：接入层→编排层→能力层→数据层，每层可独立替换和降级。",
     "description": "把 LLM 应用拆成职责清晰的组件并定义数据流：典型分层是接入层（网关/鉴权/限流）→ 编排层（Agent 循环、意图路由）→ 能力层（RAG 检索、工具集、模型调用）→ 数据层（向量库、业务库、缓存）。画架构图要讲清楚：请求怎么流、数据在哪存、依赖谁调用谁、故障时怎么降级。好架构的检验标准：每个组件可以独立替换、独立扩容、独立排查。",
+    "background": "LLM 应用架构从 2023 年的'一个脚本调 API'快速进化：流量上来后网关和限流是刚需、模型供应商要可切换、多组件（向量库/缓存/业务库）要各司其职。2024 年后行业沉淀出相对收敛的四层架构（接入/编排/能力/数据），配套 LLM 网关（LiteLLM、OneAPI）、可观测（Langfuse）等标准件，架构趋同、细节因地制宜。",
+    "problem": "解决'需求膨胀后代码变成一团浆糊'的问题：早期 demo 直接在接口里调模型，加上限流、多模型、缓存、Agent 后无处下手。分层架构让每类关注点有归属：换模型只动能力层、改流程只动编排层、排查问题按层定位。",
     "analogy": "盖房子先画施工图：哪里承重（核心链路）、哪里能开窗（可扩展点）、水电怎么走（数据流），都要在动工前定好——边盖边改结构是工程事故之源。",
     "points": [
       "模型调用层要做成统一网关：换模型、加备用模型只改一处",
       "向量库、业务库、缓存分离部署，故障域互不波及",
       "架构图先画'数据流'再画'组件框'，箭头比方块重要"
     ],
+    "pitfalls": [
+      "过度设计——日调用量几百次的内部工具不需要网关和微服务，单体 + 模块化足够",
+      "模型调用散落各处——不收敛到统一网关，换模型/加备份/算成本都要全局搜索代码",
+      "架构图只画组件不画数据流——箭头（数据怎么流、谁调谁、故障怎么降级）才是架构图的信息量所在"
+    ],
+    "applications": [
+      "客服系统四层架构：网关限流 → Java 业务 → Python Agent 编排 → 模型网关+存储",
+      "模型网关层：统一多供应商接入、主备切换、计费审计（这一层值得最先建）",
+      "知识库中台：文档解析/索引服务独立成服务，多应用共享一个知识库",
+      "降级链设计：LLM 网关→备用模型→FAQ 缓存→转人工，每一级预先定义"
+    ],
     "example": {
       "scenario": "客服系统架构图：用户 → Nginx 网关（鉴权/限流）→ Java 业务服务（会话管理）→ Python Agent 服务（意图路由→RAG/工具）→ 依赖：PostgreSQL(pgvector)、Redis、LLM 网关（主 GPT-4o/备 DeepSeek）。标注：LLM 网关故障时降级返回 FAQ 缓存。",
       "code": "app_arch = {\n    '接入层': ['Nginx(限流/TLS)', 'Java业务服务(鉴权/会话)'],\n    '编排层': ['Python Agent服务', '  ├ 意图路由',\n               '  ├ RAG链(检索->重排->生成)', '  └ 工具执行器'],\n    '能力层': ['LLM网关(主GPT-4o/备DeepSeek/缓存)',\n               '向量检索(pgvector)', '工具集(工单/CRM)'],\n    '数据层': ['PostgreSQL(业务+向量)', 'Redis(缓存/限流)',\n               '对象存储(文档原件)'],\n    '降级链': 'LLM网关挂->DeepSeek->FAQ缓存->转人工',\n}",
       "lang": "python"
     },
+    "related": [
+      "model-selection",
+      "fault-tolerance",
+      "logging-monitoring"
+    ],
+    "extended": "进阶方向：LLM 网关选型（LiteLLM/OneAPI/Higress）、四层架构的团队分工映射、容量规划方法",
     "image": "images/project-architecture.png"
   },
   {
     "id": "challenges-optimization",
     "category": "项目实战概念",
     "name": "难点与优化",
+    "summary": "真实项目的攻坚地图：chunk 调参、成本控制、延迟优化——先建评测基线，再逐项开火。",
     "description": "真实项目中反复出现的优化课题：chunk size 调优（512 起步按评测调）、混合检索与查询改写（解决召回率瓶颈）、成本控制（缓存 + 模型分级路由 + prompt 瘦身）、响应延迟（流式输出 + 并行检索 + 小模型预路由）、评测体系（没有评测集的优化都是玄学）。共同心法：先建立可量化的评测基线，再逐项改、逐项对比，拒绝凭感觉优化。",
+    "background": "每个 RAG/Agent 项目上线后都会撞上同一批墙：检索不准、成本超预算、响应太慢。2023-2024 年大量实践沉淀出优化方法论，其核心不是某个技巧，而是工作方式：先建评测集拿到基线分数，再按'检索→生成→工程'顺序逐项优化并回归对比。社区流传的优化清单（HyDE、混合检索、重排……）只有放在这个流程里才不会变成乱枪打鸟。",
+    "problem": "解决'优化凭感觉、改动看运气'的问题：某次改动后'感觉变好了'，两周后发现另两类问题变差了。没有量化基线和单项变量的回归评测，优化就是赌博。方法论把'变好'变成可测量、可归因、可回滚的工程动作。",
     "analogy": "给老房子节能改造：先装电表看哪里耗电（评测基线），再依次换灯泡、加保温层（逐项优化），每改一样看一次电表（回归评测）——不装电表就改造，只省了个寂寞。",
     "points": [
       "优化顺序：先检索后生成——检索不准，换再强的模型也没用",
       "成本三板斧：相同问题缓存、轻任务用小模型、prompt 去冗余",
       "延迟感知优化优先做流式输出：总时长不变，体感快一倍"
     ],
+    "pitfalls": [
+      "同时改多个变量——效果变化无法归因，一次只动一个开关并跑评测",
+      "过拟合评测集——针对 50 条评测集反复调参，线上真实问题分布变了就露馅，评测集要定期换血",
+      "追新技巧不问前提——HyDE/重排都有适用场景，先诊断瓶颈再选药，不是全都上"
+    ],
+    "applications": [
+      "检索优化路线：基线 62% → 混合检索 71% → 调 chunk 78% → 加重排 85% → 查询改写 88%（真实项目节奏）",
+      "成本优化：相同问题缓存（省 70%）、轻任务小模型（省 80%）、prompt 瘦身（省 20%）",
+      "延迟优化：流式输出（体感先行）、检索与改写并行、首 token 延迟监控",
+      "质量-成本-延迟三角：明确业务最在乎哪一角，另两角让步"
+    ],
     "example": {
       "scenario": "某知识库项目优化记录：基线（纯向量检索，chunk 1024）准确率 62% → 混合检索 +RRF 71% → chunk 512+标题分块 78% → 加 Rerank 85% → 查询改写 88%，耗时两周，每一步都有评测数据支撑，可随时回滚。",
       "code": "class RagPipeline:\n    def __init__(self, config):\n        self.cfg = config\n\n    def answer(self, q):\n        q2 = rewrite(q) if self.cfg.rewrite else q\n        docs = vector_search(q2, k=self.cfg.top_k)\n        if self.cfg.hybrid:\n            docs = rrf_fuse(docs, bm25_search(q2))\n        if self.cfg.rerank:\n            docs = rerank(q2, docs, top_n=5)\n        return generate(q, docs)\n\n# 每个开关独立控制 -> 跑评测集做 A/B\n# {rewrite: False, hybrid: False, rerank: False}  baseline 62%\n# {rewrite: False, hybrid: True,  rerank: False}  -> 71%\n# {rewrite: False, hybrid: True,  rerank: True}   -> 85%",
       "lang": "python"
     },
+    "related": [
+      "rag-evaluation",
+      "evaluation-metrics",
+      "hybrid-search"
+    ],
+    "extended": "进阶方向：优化决策树（哪个指标差→改哪个组件）、评测集构建与轮换、成本-效果帕累托分析",
     "image": "images/challenges-optimization.png"
   },
   {
     "id": "evaluation-metrics",
     "category": "项目实战概念",
     "name": "评估指标",
+    "summary": "给 AI 应用做体检：质量、性能、成本、业务四类硬指标，用数据代替汇报话术。",
     "description": "衡量 LLM 应用效果的四类硬指标：质量（检索召回率/命中率、答案准确率、忠实度）、性能（首 token 延迟 TTFT、P95 端到端延迟、吞吐 QPS）、成本（单次查询 token 花费、日均成本）、业务（问题解决率、转人工率、用户满意度 CSAT）。原则：模型能力指标（如 MMLU 分数）与业务指标分开看，最终以业务指标为准绳。",
+    "background": "LLM 应用的度量体系从传统软件指标演化而来，又长出新维度：token 成本、忠实度、转人工率是 AI 特有的。2023 年后行业形成四类指标共识（质量/性能/成本/业务），并明确一条原则：离线评测指标（benchmark 分数）与在线业务指标（解决率）必须分开看，后者才是终极裁判。月度'AI 应用体检报告'成为运营标配。",
+    "problem": "解决'AI 效果说不清、汇报靠形容词'的问题：'机器人变聪明了'无法决策；'准确率 88%、成本 ¥0.03/次、转人工率 12%→8%'才能决策——要不要扩量、优化哪里、预算多少。指标体系把 AI 从玄学拉回管理学。",
     "analogy": "体检报告：不能只看体重一项（准确率），血压（延迟）、血脂（成本）、精神状态（用户满意度）都要看，而且化验指标（离线评测）好不代表生活质量（业务指标）好。",
     "points": [
       "上线前盯离线评测集，上线后盯在线业务指标，两者都要有看板",
       "单次查询成本 = (输入token×单价 + 输出token×单价 + 检索/工具成本)",
       "解决率比满意度更硬：满意度可刷好评，解决率看是否转人工/重复提问"
     ],
+    "pitfalls": [
+      "只看平均不看分布——平均延迟 2 秒很漂亮，P95 是 15 秒，最不满意的恰恰是那 5%",
+      "业务指标缺位——离线准确率 95% 但转人工率没降，说明解决的不是用户的真问题",
+      "指标无人认领——看板建了没人对指标恶化负责，每个指标要有 owner 和响应预案"
+    ],
+    "applications": [
+      "上线决策：准确率、解决率达到门槛才全量，否则继续灰度",
+      "运营看板：每日准确率/延迟/成本/转人工率四象限监控，异常告警",
+      "成本管理：单次成本 = 输入 token 单价+输出 token 单价+检索成本，按功能线分摊",
+      "模型供应商评审：同一评测集跑分对比，用数据谈采购"
+    ],
     "example": {
       "scenario": "客服机器人月度体检：准确率 88%、TTFT 0.9s、P95 延迟 4.2s、单次成本 ¥0.03、转人工率 12%（上月 18%）。结论：质量达标，但 P95 延迟偏高，下月优化检索并行度。",
       "code": "def daily_report(logs):\n    n = len(logs)\n    return {\n        '准确率':   sum(l['correct'] for l in logs) / n,\n        'TTFT_p50': percentile([l['ttft'] for l in logs], 50),\n        '延迟_p95': percentile([l['latency'] for l in logs], 95),\n        '单次成本': sum(l['cost'] for l in logs) / n,\n        '转人工率': sum(l['escalated'] for l in logs) / n,\n        '重复提问率': sum(l['reasked'] for l in logs) / n,\n    }\n# 每天跑批 -> 推送到看板；指标突变即触发告警",
       "lang": "python"
     },
+    "related": [
+      "rag-evaluation",
+      "logging-monitoring",
+      "challenges-optimization"
+    ],
+    "extended": "进阶方向：指标体系设计（北极星+护栏指标）、P95/P99 统计方法、AI 应用月度体检报告模板",
     "image": "images/evaluation-metrics.png"
   }
 ]

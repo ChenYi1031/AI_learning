@@ -393,17 +393,94 @@ body {
   border: 1px solid rgba(108, 99, 255, 0.3);
 }
 
-.analogy-box strong {
-  display: block;
-  font-size: 13px;
-  color: #ffe08a;
-  margin-bottom: 6px;
-}
-
 .analogy-box p {
   font-size: 14px;
   line-height: 1.8;
   color: var(--text);
+}
+
+.problem-box {
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(78, 205, 196, 0.07);
+  border-left: 3px solid var(--cyan);
+}
+
+.problem-box p {
+  font-size: 14px;
+  line-height: 1.85;
+  color: var(--text);
+}
+
+/* 常见误区：警示琥珀色 */
+.pitfall-list { list-style: none; display: grid; gap: 8px; }
+
+.pitfall-list li {
+  position: relative;
+  padding: 8px 12px 8px 34px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: #ffd9a0;
+  background: rgba(255, 167, 38, 0.07);
+  border: 1px solid rgba(255, 167, 38, 0.22);
+  border-radius: 10px;
+}
+
+.pitfall-list li::before {
+  content: "✗";
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  font-weight: 700;
+  color: #ffa726;
+}
+
+/* 实际应用场景 */
+.app-list { list-style: none; display: grid; gap: 8px; }
+
+.app-list li {
+  position: relative;
+  padding-left: 22px;
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--text-dim);
+}
+
+.app-list li::before {
+  content: "▸";
+  position: absolute;
+  left: 4px;
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+/* 延伸学习 */
+.extended-box { display: grid; gap: 12px; }
+
+.extended-text {
+  font-size: 13.5px;
+  line-height: 1.8;
+  color: var(--text-dim);
+}
+
+.related-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.related-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(108, 99, 255, 0.4);
+  background: var(--accent-soft);
+  color: #c9c4ff;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.related-chip:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4);
 }
 
 .points-list {
