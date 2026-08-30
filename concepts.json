@@ -33,7 +33,7 @@
       "context-window"
     ],
     "extended": "进阶方向：FlashAttention（省显存的注意力实现）、MoE（稀疏专家混合）、长上下文位置编码（RoPE/ALiBi）",
-    "image": "images/transformer.png"
+    "image": "images/transformer.webp"
   },
   {
     "id": "self-attention",
@@ -69,7 +69,7 @@
       "token"
     ],
     "extended": "进阶方向：FlashAttention、KV Cache（推理加速的核心）、GQA/MQA（多头注意力的省显存变体）",
-    "image": "images/self-attention.png"
+    "image": "images/self-attention.webp"
   },
   {
     "id": "encoder-decoder",
@@ -106,7 +106,7 @@
       "token"
     ],
     "extended": "进阶方向：BART/T5 的跨度退化（span corruption）、PrefixLM、统一自回归范式的 in-context learning",
-    "image": "images/encoder-decoder.png"
+    "image": "images/encoder-decoder.webp"
   },
   {
     "id": "residual-norm",
@@ -142,7 +142,7 @@
       "flash-attention"
     ],
     "extended": "进阶方向：Pre-LN vs Post-LN 的稳定性分析（Xiong et al. 2020）、RMSNorm 论文、DeepNorm（把层数推到 1000 层）",
-    "image": "images/residual-norm.png"
+    "image": "images/residual-norm.webp"
   },
   {
     "id": "positional-encoding",
@@ -179,7 +179,7 @@
       "attention-is-all-you-need"
     ],
     "extended": "进阶方向：RoFormer 原论文、YaRN 长度扩展、ALiBi（用线性惩罚替代旋转）、位置编码外推能力评测（RULER）",
-    "image": "images/positional-encoding.png"
+    "image": "images/positional-encoding.webp"
   },
   {
     "id": "multi-head-attention",
@@ -216,7 +216,7 @@
       "residual-norm"
     ],
     "extended": "进阶方向：GQA/MQA/MLA 论文对比、注意力头可解释性研究（induction heads）、FlashAttention 与多头的配合",
-    "image": "images/multi-head-attention.png"
+    "image": "images/multi-head-attention.webp"
   },
   {
     "id": "ffn",
@@ -253,7 +253,7 @@
       "quantization"
     ],
     "extended": "进阶方向：GLU 变体论文（SwiGLU/GeGLU）、ROME/MEMIT 知识编辑、FFN 与注意力参数配比研究",
-    "image": "images/ffn.png"
+    "image": "images/ffn.webp"
   },
   {
     "id": "token",
@@ -290,7 +290,7 @@
       "prompt-engineering"
     ],
     "extended": "进阶方向：tiktoken/transformers 计数工具、词表大小与多语言能力的权衡、token 截断策略",
-    "image": "images/token.png"
+    "image": "images/token.webp"
   },
   {
     "id": "tokenizer",
@@ -327,7 +327,7 @@
       "llm-api"
     ],
     "extended": "进阶方向：byte-level BPE vs WordPiece vs Unigram、中文词表优化、tokenizer-free 方向（如 ByT5）",
-    "image": "images/tokenizer.png"
+    "image": "images/tokenizer.webp"
   },
   {
     "id": "embedding",
@@ -365,7 +365,7 @@
       "vector-database"
     ],
     "extended": "进阶方向：对比学习训练原理、Matryoshka（套娃）维度裁剪、多模态 embedding（图文同空间）",
-    "image": "images/embedding.png"
+    "image": "images/embedding.webp"
   },
   {
     "id": "cosine-similarity",
@@ -403,7 +403,7 @@
       "ann"
     ],
     "extended": "进阶方向：欧氏/内积/余弦三者的适用场景、归一化技巧、针对重排的 Cross-Encoder 为何不用余弦",
-    "image": "images/cosine-similarity.png"
+    "image": "images/cosine-similarity.webp"
   },
   {
     "id": "temperature",
@@ -441,7 +441,7 @@
       "model-selection"
     ],
     "extended": "进阶方向：采样参数对 Agent 稳定性的影响、min_p 采样、beam search 与采样的区别",
-    "image": "images/temperature.png"
+    "image": "images/temperature.webp"
   },
   {
     "id": "top-p",
@@ -478,7 +478,7 @@
       "llm-api"
     ],
     "extended": "进阶方向：nucleus sampling 原论文、min_p 采样（按相对概率截断）、对比 top-k/top-p/min-p 的实测差异",
-    "image": "images/top-p.png"
+    "image": "images/top-p.webp"
   },
   {
     "id": "top-k",
@@ -515,7 +515,7 @@
       "llm-api"
     ],
     "extended": "进阶方向：贪心解码 vs 采样在机器翻译中的表现差异、diversity 促使的 group beam search",
-    "image": "images/top-k.png"
+    "image": "images/top-k.webp"
   },
   {
     "id": "prompt-engineering",
@@ -553,7 +553,7 @@
       "llm-api"
     ],
     "extended": "进阶方向：OpenAI/Anthropic 官方 prompt 指南、结构化输出（JSON Schema/Function Calling）、prompt 版本管理与 A/B 测试",
-    "image": "images/prompt-engineering.png"
+    "image": "images/prompt-engineering.webp"
   },
   {
     "id": "chain-of-thought",
@@ -591,7 +591,7 @@
       "model-selection"
     ],
     "extended": "进阶方向：Self-Consistency（多次采样投票）、Tree-of-Thoughts、推理模型的'思考预算'控制",
-    "image": "images/chain-of-thought.png"
+    "image": "images/chain-of-thought.webp"
   },
   {
     "id": "react-pattern",
@@ -629,7 +629,7 @@
       "agent"
     ],
     "extended": "进阶方向：ReAct 原论文、Plan-and-Execute 与 ReAct 的取舍、Reflexion（在 ReAct 上加反思）",
-    "image": "images/react-pattern.png"
+    "image": "images/react-pattern.webp"
   },
   {
     "id": "hallucination",
@@ -667,7 +667,7 @@
       "prompt-engineering"
     ],
     "extended": "进阶方向：幻觉分类（事实性/忠实性）、RAGAS 忠实度指标、引用生成（attribution）技术",
-    "image": "images/hallucination.png"
+    "image": "images/hallucination.webp"
   },
   {
     "id": "context-window",
@@ -705,7 +705,7 @@
       "context-compression"
     ],
     "extended": "进阶方向：RoPE/ALiBi 位置编码、KV Cache 显存计算、大海捞针评测、RAG 与长上下文的取舍",
-    "image": "images/context-window.png"
+    "image": "images/context-window.webp"
   },
   {
     "id": "function-calling",
@@ -743,7 +743,7 @@
       "mcp"
     ],
     "extended": "进阶方向：parallel tool calls、strict mode（强制 schema 合法）、instructor 库的结构化输出封装",
-    "image": "images/function-calling.png"
+    "image": "images/function-calling.webp"
   },
   {
     "id": "model-selection",
@@ -781,7 +781,7 @@
       "evaluation-metrics"
     ],
     "extended": "进阶方向：模型路由框架（RouteLLM）、成本/效果帕累托曲线、模型评测集建设方法",
-    "image": "images/model-selection.png"
+    "image": "images/model-selection.webp"
   },
   {
     "id": "pre-training",
@@ -818,7 +818,7 @@
       "ffn"
     ],
     "extended": "进阶方向：Chinchilla 论文、数据配比研究（Dolma/FineWeb 数据集）、MiniCPM/TinyLlama 等小成本复现实验",
-    "image": "images/pre-training.png"
+    "image": "images/pre-training.webp"
   },
   {
     "id": "post-training",
@@ -855,7 +855,7 @@
       "hallucination"
     ],
     "extended": "进阶方向：InstructGPT/LIMA/DPO 三篇必读、Constitutional AI、GRPO（DeepSeek 的简化 PPO）、推理模型训练（R1-Zero）",
-    "image": "images/post-training.png"
+    "image": "images/post-training.webp"
   },
   {
     "id": "rlhf",
@@ -892,7 +892,7 @@
       "pre-training"
     ],
     "extended": "进阶方向：InstructGPT 原论文、Anthropic HHh 数据集与 Constitutional AI、GRPO 算法、RLVR（可验证奖励）",
-    "image": "images/rlhf.png"
+    "image": "images/rlhf.webp"
   },
   {
     "id": "scaling-laws",
@@ -929,7 +929,7 @@
       "evaluation-metrics"
     ],
     "extended": "进阶方向：Kaplan 2020 / Chinchilla 2022 两篇对照读、涌现能力之争（Schaeffer 2023）、数据受限时代的 scaling 新变量",
-    "image": "images/scaling-laws.png"
+    "image": "images/scaling-laws.webp"
   },
   {
     "id": "kv-cache",
@@ -966,7 +966,7 @@
       "quantization"
     ],
     "extended": "进阶方向：PagedAttention/vLLM 论文、MLA（DeepSeek）、前缀缓存与 radix attention（SGLang）、KV 量化（KIVI）",
-    "image": "images/kv-cache.png"
+    "image": "images/kv-cache.webp"
   },
   {
     "id": "quantization",
@@ -1003,7 +1003,7 @@
       "docker"
     ],
     "extended": "进阶方向：GPTQ/AWQ 论文、llama.cpp 的 k-quants、BitNet 1.58-bit、量化后评测（perplexity + 下游任务都要测）",
-    "image": "images/quantization.png"
+    "image": "images/quantization.webp"
   },
   {
     "id": "distillation",
@@ -1040,7 +1040,7 @@
       "model-selection"
     ],
     "extended": "进阶方向：Hinton 蒸馏原论文（温度参数 T）、R1 蒸馏报告、在线蒸馏 vs 离线蒸馏、蒸馏数据的合规边界",
-    "image": "images/distillation.png"
+    "image": "images/distillation.webp"
   },
   {
     "id": "moe",
@@ -1077,7 +1077,7 @@
       "quantization"
     ],
     "extended": "进阶方向：Switch Transformer、Mixtral 技术报告、DeepSeek-V3 论文（无辅助损失负载均衡）、专家并行通信优化",
-    "image": "images/moe.png"
+    "image": "images/moe.webp"
   },
   {
     "id": "flash-attention",
@@ -1114,7 +1114,7 @@
       "context-window"
     ],
     "extended": "进阶方向：FlashAttention-1/2/3 论文对照、IO 感知算法设计思想、MLA/FlashAttention 在推理侧的组合",
-    "image": "images/flash-attention.png"
+    "image": "images/flash-attention.webp"
   },
   {
     "id": "multimodal",
@@ -1152,7 +1152,7 @@
       "prompt-engineering"
     ],
     "extended": "进阶方向：LLaVA/BLIP-2/Qwen-VL 架构对比、CLIP 对比学习、原生多模态（GPT-4o）与拼接式的能力差异、视觉 token 压缩",
-    "image": "images/multimodal.png"
+    "image": "images/multimodal.webp"
   },
   {
     "id": "agent",
@@ -1191,7 +1191,7 @@
       "multi-agent"
     ],
     "extended": "进阶方向：Anthropic《Building Effective Agents》、LangGraph 状态机、Agent 评测（SWE-bench/GAIA）",
-    "image": "images/agent.png"
+    "image": "images/agent.webp"
   },
   {
     "id": "planning",
@@ -1229,7 +1229,7 @@
       "react-loop"
     ],
     "extended": "进阶方向：Plan-and-Execute vs ReAct 的取舍、ReWOO（解耦规划省 token）、任务依赖图（DAG）调度",
-    "image": "images/planning.png"
+    "image": "images/planning.webp"
   },
   {
     "id": "tool-use",
@@ -1267,7 +1267,7 @@
       "mcp"
     ],
     "extended": "进阶方向：MCP 协议、工具鉴权与沙箱、工具选择准确率评测",
-    "image": "images/tool-use.png"
+    "image": "images/tool-use.webp"
   },
   {
     "id": "json-schema-tools",
@@ -1305,7 +1305,7 @@
       "pydantic"
     ],
     "extended": "进阶方向：OpenAPI/Swagger 自动转工具 schema、strict 模式（100% schema 合法）、工具描述的 A/B 评测",
-    "image": "images/json-schema-tools.png"
+    "image": "images/json-schema-tools.webp"
   },
   {
     "id": "react-loop",
@@ -1343,7 +1343,7 @@
       "context-window"
     ],
     "extended": "进阶方向：LangGraph 状态机替代裸循环、观察结果压缩策略、循环轨迹的可视化调试（LangSmith/Langfuse）",
-    "image": "images/react-loop.png"
+    "image": "images/react-loop.webp"
   },
   {
     "id": "short-term-memory",
@@ -1381,7 +1381,7 @@
       "token"
     ],
     "extended": "进阶方向：对话摘要策略、记忆分层架构（工作台+笔记本+档案室）、MemGPT 式虚拟上下文管理",
-    "image": "images/short-term-memory.png"
+    "image": "images/short-term-memory.webp"
   },
   {
     "id": "long-term-memory",
@@ -1419,7 +1419,7 @@
       "rag"
     ],
     "extended": "进阶方向：Mem0/Letta 框架、记忆写入策略（何时存、存什么）、记忆冲突消解",
-    "image": "images/long-term-memory.png"
+    "image": "images/long-term-memory.webp"
   },
   {
     "id": "working-memory",
@@ -1457,7 +1457,7 @@
       "langgraph"
     ],
     "extended": "进阶方向：LangGraph checkpoint、事件溯源（event sourcing）模式、Human-in-the-loop 状态机",
-    "image": "images/working-memory.png"
+    "image": "images/working-memory.webp"
   },
   {
     "id": "multi-agent",
@@ -1496,7 +1496,7 @@
       "autogen"
     ],
     "extended": "进阶方向：MetaGPT/CrewAI 的角色设计模式、A2A 协议、多 Agent 成本-收益评估框架",
-    "image": "images/multi-agent.png"
+    "image": "images/multi-agent.webp"
   },
   {
     "id": "loop-guard",
@@ -1534,7 +1534,7 @@
       "agent"
     ],
     "extended": "进阶方向：guardrails 框架（NeMo Guardrails）、Agent 权限分级、预算感知的动态策略切换",
-    "image": "images/loop-guard.png"
+    "image": "images/loop-guard.webp"
   },
   {
     "id": "reflexion",
@@ -1572,7 +1572,7 @@
       "agent"
     ],
     "extended": "进阶方向：Reflexion 原论文、Tree of Thoughts 的回溯搜索、经验回放库构建",
-    "image": "images/reflexion.png"
+    "image": "images/reflexion.webp"
   },
   {
     "id": "self-critique",
@@ -1610,7 +1610,7 @@
       "chain-of-thought"
     ],
     "extended": "进阶方向：Self-Refine 论文、 Constitutional AI（RLAIF 的批评-修订训练法）、交叉模型互评",
-    "image": "images/self-critique.png"
+    "image": "images/self-critique.webp"
   },
   {
     "id": "rag",
@@ -1649,7 +1649,7 @@
       "rag-evaluation"
     ],
     "extended": "进阶方向：Advanced RAG 全链路（混合检索/重排/查询改写）、GraphRAG、Agentic RAG",
-    "image": "images/rag.png"
+    "image": "images/rag.webp"
   },
   {
     "id": "document-parsing",
@@ -1687,7 +1687,7 @@
       "rag-evaluation"
     ],
     "extended": "进阶方向：MinerU/Marker/Unstructured 对比、版面分析模型（LayoutLM）、多模态模型直接读页",
-    "image": "images/document-parsing.png"
+    "image": "images/document-parsing.webp"
   },
   {
     "id": "chunking",
@@ -1725,7 +1725,7 @@
       "rag-evaluation"
     ],
     "extended": "进阶方向：语义分块（embedding 相邻句相似度断点）、Late Chunking、RAPTOR 层级摘要索引",
-    "image": "images/chunking.png"
+    "image": "images/chunking.webp"
   },
   {
     "id": "embedding-model",
@@ -1763,7 +1763,7 @@
       "vector-database"
     ],
     "extended": "进阶方向：C-MTEB/MTEB 榜单、embedding 微调（对比学习正负样本构造）、bge-m3 的三模式混合检索",
-    "image": "images/embedding-model.png"
+    "image": "images/embedding-model.webp"
   },
   {
     "id": "vector-database",
@@ -1801,7 +1801,7 @@
       "postgresql"
     ],
     "extended": "进阶方向：HNSW/IVF 参数调优、混合标量+向量过滤、向量库选型决策树",
-    "image": "images/vector-database.png"
+    "image": "images/vector-database.webp"
   },
   {
     "id": "ann",
@@ -1839,7 +1839,7 @@
       "rag"
     ],
     "extended": "进阶方向：HNSW 原论文、DiskANN（磁盘级向量检索）、量化压缩（PQ/SQ）的精度损失评估",
-    "image": "images/ann.png"
+    "image": "images/ann.webp"
   },
   {
     "id": "hybrid-search",
@@ -1877,7 +1877,7 @@
       "rag-evaluation"
     ],
     "extended": "进阶方向：RRF 公式与调参、Learned Sparse Retrieval（SPLADE）、Elasticsearch/OpenSearch 的混合检索实践",
-    "image": "images/hybrid-search.png"
+    "image": "images/hybrid-search.webp"
   },
   {
     "id": "rerank",
@@ -1915,7 +1915,7 @@
       "context-compression"
     ],
     "extended": "进阶方向：bge-reranker/Cohere Rerank 对比、ColBERT 多向量交互、rerank 分数阈值校准",
-    "image": "images/rerank.png"
+    "image": "images/rerank.webp"
   },
   {
     "id": "query-rewrite",
@@ -1953,7 +1953,7 @@
       "multi-agent"
     ],
     "extended": "进阶方向：多查询生成（multi-query）+ RRF 融合、HyDE 与改写的组合拳、改写效果评测方法",
-    "image": "images/query-rewrite.png"
+    "image": "images/query-rewrite.webp"
   },
   {
     "id": "hyde",
@@ -1991,7 +1991,7 @@
       "rag"
     ],
     "extended": "进阶方向：HyDE 原论文、多假设文档取平均、假设文档与真实文档混合打分",
-    "image": "images/hyde.png"
+    "image": "images/hyde.webp"
   },
   {
     "id": "context-compression",
@@ -2029,7 +2029,7 @@
       "rag-evaluation"
     ],
     "extended": "进阶方向：LLMLingua（token 级压缩）、句子级 vs 文档级压缩的取舍、压缩率-忠实度的平衡评测",
-    "image": "images/context-compression.png"
+    "image": "images/context-compression.webp"
   },
   {
     "id": "rag-evaluation",
@@ -2067,7 +2067,7 @@
       "evaluation-metrics"
     ],
     "extended": "进阶方向：RAGAS/TruLens/DeepEval 实操、评测集构建方法论、线上 A/B 与离线指标的相关性校准",
-    "image": "images/rag-evaluation.png"
+    "image": "images/rag-evaluation.webp"
   },
   {
     "id": "langchain",
@@ -2105,7 +2105,7 @@
       "rag"
     ],
     "extended": "进阶方向：LCEL 深入、LangSmith 可观测平台、与 LlamaIndex 的分工对比",
-    "image": "images/langchain.png"
+    "image": "images/langchain.webp"
   },
   {
     "id": "langgraph",
@@ -2143,7 +2143,7 @@
       "working-memory"
     ],
     "extended": "进阶方向：LangGraph checkpoint/时间旅行调试、Supervisor 模式、与 Temporal 类工作流引擎的对比",
-    "image": "images/langgraph.png"
+    "image": "images/langgraph.webp"
   },
   {
     "id": "lcel",
@@ -2181,7 +2181,7 @@
       "llm-api"
     ],
     "extended": "进阶方向：Runnable 协议全族（with_retry/with_fallbacks/with_config）、链的可视化与追踪",
-    "image": "images/lcel.png"
+    "image": "images/lcel.webp"
   },
   {
     "id": "llamaindex",
@@ -2219,7 +2219,7 @@
       "chunking"
     ],
     "extended": "进阶方向：LlamaIndex 索引类型全景、LlamaParse 文档解析、模块化组件与 LangChain 互操作",
-    "image": "images/llamaindex.png"
+    "image": "images/llamaindex.webp"
   },
   {
     "id": "autogen",
@@ -2257,7 +2257,7 @@
       "loop-guard"
     ],
     "extended": "进阶方向：AutoGen 0.4 新架构、GroupChat 发言策略、代码执行沙箱方案（Docker/Jupyter）",
-    "image": "images/autogen.png"
+    "image": "images/autogen.webp"
   },
   {
     "id": "crewai",
@@ -2295,7 +2295,7 @@
       "planning"
     ],
     "extended": "进阶方向：CrewAI Flow（事件化工作流）、角色 prompt 设计模式、与 LangGraph Supervisor 的对比",
-    "image": "images/crewai.png"
+    "image": "images/crewai.webp"
   },
   {
     "id": "mcp",
@@ -2333,7 +2333,7 @@
       "json-schema-tools"
     ],
     "extended": "进阶方向：MCP 协议规范（tools/resources/prompts 三原语）、写一个自己的 Server、MCP 安全最佳实践",
-    "image": "images/mcp.png"
+    "image": "images/mcp.webp"
   },
   {
     "id": "dify-coze",
@@ -2371,7 +2371,7 @@
       "mcp"
     ],
     "extended": "进阶方向：Dify 工作流编排实操、平台 vs 自研的决策框架、LLMOps（版本/评测/监控）体系",
-    "image": "images/dify-coze.png"
+    "image": "images/dify-coze.webp"
   },
   {
     "id": "llm-api",
@@ -2409,7 +2409,7 @@
       "logging-monitoring"
     ],
     "extended": "进阶方向：SSE 流式协议细节、Responses API（OpenAI 新接口）、模型网关（LiteLLM）部署",
-    "image": "images/llm-api.png"
+    "image": "images/llm-api.webp"
   },
   {
     "id": "python-basics",
@@ -2447,7 +2447,7 @@
       "asyncio"
     ],
     "extended": "进阶方向：uv 包管理、dataclass/protocol、Python 性能剖析（cProfile）",
-    "image": "images/python-basics.png"
+    "image": "images/python-basics.webp"
   },
   {
     "id": "fastapi",
@@ -2485,7 +2485,7 @@
       "python-basics"
     ],
     "extended": "进阶方向：SSE/WebSocket 流式响应、依赖注入系统、中间件与后台任务",
-    "image": "images/fastapi.png"
+    "image": "images/fastapi.webp"
   },
   {
     "id": "pydantic",
@@ -2523,7 +2523,7 @@
       "function-calling"
     ],
     "extended": "进阶方向：instructor 库、v2 新特性（computed_field、 discriminated unions）、JSON Schema 导出",
-    "image": "images/pydantic.png"
+    "image": "images/pydantic.webp"
   },
   {
     "id": "asyncio",
@@ -2561,7 +2561,7 @@
       "langchain"
     ],
     "extended": "进阶方向：httpx 异步客户端、asyncio.gather/as_completed 差异、任务取消与超时控制",
-    "image": "images/asyncio.png"
+    "image": "images/asyncio.webp"
   },
   {
     "id": "http-retry",
@@ -2599,7 +2599,7 @@
       "loop-guard"
     ],
     "extended": "进阶方向：tenacity 重试库、幂等键设计、熔断器模式与重试的配合",
-    "image": "images/http-retry.png"
+    "image": "images/http-retry.webp"
   },
   {
     "id": "postgresql",
@@ -2637,7 +2637,7 @@
       "redis"
     ],
     "extended": "进阶方向：pgvector HNSW 调参、JSONB 索引、PG 16 逻辑复制与高可用",
-    "image": "images/postgresql.png"
+    "image": "images/postgresql.webp"
   },
   {
     "id": "mvcc",
@@ -2674,7 +2674,7 @@
       "sqlalchemy"
     ],
     "extended": "进阶方向：PostgreSQL MVCC 文档（xmin/xmax/ctid）、InnoDB undo 链与 ReadView、VACUUM 调优、长事务监控",
-    "image": "images/mvcc.png"
+    "image": "images/mvcc.webp"
   },
   {
     "id": "transaction-isolation",
@@ -2711,7 +2711,7 @@
       "spring-boot"
     ],
     "extended": "进阶方向：《A Critique of ANSI SQL Isolation Levels》、PG 快照隔离 vs InnoDB RR 的实现差异、分布式事务（2PC/SAGA）入门",
-    "image": "images/transaction-isolation.png"
+    "image": "images/transaction-isolation.webp"
   },
   {
     "id": "redis",
@@ -2749,7 +2749,7 @@
       "logging-monitoring"
     ],
     "extended": "进阶方向：语义缓存（GPTCache 思路）、Redis Stream 做任务队列、缓存穿透/雪崩防护",
-    "image": "images/redis.png"
+    "image": "images/redis.webp"
   },
   {
     "id": "sqlalchemy",
@@ -2787,7 +2787,7 @@
       "python-basics"
     ],
     "extended": "进阶方向：2.0 风格查询、异步 SQLAlchemy（与 FastAPI 配合）、Alembic 迁移工作流",
-    "image": "images/sqlalchemy.png"
+    "image": "images/sqlalchemy.webp"
   },
   {
     "id": "docker",
@@ -2825,7 +2825,7 @@
       "fault-tolerance"
     ],
     "extended": "进阶方向：多阶段构建瘦身、GPU 容器（nvidia-container-toolkit）、docker-compose 生产化",
-    "image": "images/docker.png"
+    "image": "images/docker.webp"
   },
   {
     "id": "logging-monitoring",
@@ -2863,7 +2863,7 @@
       "evaluation-metrics"
     ],
     "extended": "进阶方向：Langfuse/LangSmith 实操、OpenTelemetry 接入 LLM SDK、成本告警策略",
-    "image": "images/logging-monitoring.png"
+    "image": "images/logging-monitoring.webp"
   },
   {
     "id": "fault-tolerance",
@@ -2901,7 +2901,7 @@
       "logging-monitoring"
     ],
     "extended": "进阶方向：熔断器三态机实现、跨供应商模型路由（LiteLLM Router）、混沌工程演练",
-    "image": "images/fault-tolerance.png"
+    "image": "images/fault-tolerance.webp"
   },
   {
     "id": "spring-boot",
@@ -2939,7 +2939,7 @@
       "project-architecture"
     ],
     "extended": "进阶方向：Spring AI 框架（Java 版 LangChain）、Spring Cloud 与模型网关集成、Resilience4j 熔断",
-    "image": "images/spring-boot.png"
+    "image": "images/spring-boot.webp"
   },
   {
     "id": "feign-resttemplate",
@@ -2977,7 +2977,7 @@
       "fault-tolerance"
     ],
     "extended": "进阶方向：OpenFeign + Resilience4j 实操、WebClient 响应式调用、SSE 流式转发（Java 侧透传 token 流）",
-    "image": "images/feign-resttemplate.png"
+    "image": "images/feign-resttemplate.webp"
   },
   {
     "id": "jvm-memory",
@@ -3015,7 +3015,7 @@
       "java-concurrency"
     ],
     "extended": "进阶方向：G1/ZGC 收集器、jmap/jcmd/MAT 堆分析、-XX:+HeapDumpOnOutOfMemoryError 实战",
-    "image": "images/jvm-memory.png"
+    "image": "images/jvm-memory.webp"
   },
   {
     "id": "hashmap",
@@ -3053,7 +3053,7 @@
       "redis"
     ],
     "extended": "进阶方向：ConcurrentHashMap 的 CAS+分段设计、LinkedHashMap 实现 LRU、扰动函数为什么右移 16 位异或",
-    "image": "images/hashmap.png"
+    "image": "images/hashmap.webp"
   },
   {
     "id": "java-concurrency",
@@ -3091,7 +3091,7 @@
       "asyncio"
     ],
     "extended": "进阶方向：CompletableFuture 编排全解、虚拟线程（Java 21，IO 密集新解法）、线程池参数压测方法",
-    "image": "images/java-concurrency.png"
+    "image": "images/java-concurrency.webp"
   },
   {
     "id": "kb-qa-agent",
@@ -3130,7 +3130,7 @@
       "tool-use"
     ],
     "extended": "进阶方向：意图路由设计、多轮指代消解、引用溯源 UI、知识库运营（文档保鲜机制）",
-    "image": "images/kb-qa-agent.png"
+    "image": "images/kb-qa-agent.webp"
   },
   {
     "id": "workflow-agent",
@@ -3169,7 +3169,7 @@
       "loop-guard"
     ],
     "extended": "进阶方向：状态机编排（LangGraph/Temporal）、幂等与断点续跑设计、触发器体系（定时/事件/人工）",
-    "image": "images/workflow-agent.png"
+    "image": "images/workflow-agent.webp"
   },
   {
     "id": "project-architecture",
@@ -3207,7 +3207,7 @@
       "logging-monitoring"
     ],
     "extended": "进阶方向：LLM 网关选型（LiteLLM/OneAPI/Higress）、四层架构的团队分工映射、容量规划方法",
-    "image": "images/project-architecture.png"
+    "image": "images/project-architecture.webp"
   },
   {
     "id": "challenges-optimization",
@@ -3245,7 +3245,7 @@
       "hybrid-search"
     ],
     "extended": "进阶方向：优化决策树（哪个指标差→改哪个组件）、评测集构建与轮换、成本-效果帕累托分析",
-    "image": "images/challenges-optimization.png"
+    "image": "images/challenges-optimization.webp"
   },
   {
     "id": "evaluation-metrics",
@@ -3283,6 +3283,6 @@
       "challenges-optimization"
     ],
     "extended": "进阶方向：指标体系设计（北极星+护栏指标）、P95/P99 统计方法、AI 应用月度体检报告模板",
-    "image": "images/evaluation-metrics.png"
+    "image": "images/evaluation-metrics.webp"
   }
 ]

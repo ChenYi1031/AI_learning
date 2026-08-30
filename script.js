@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  var PLACEHOLDER = "images/placeholder.png";
+  var PLACEHOLDER = "images/placeholder.webp";
   var concepts = [];
   var activeCategory = "全部";
   var keyword = "";
@@ -99,6 +99,7 @@
       wrap.className = "card-img-wrap";
       var img = document.createElement("img");
       img.loading = "lazy";
+      img.decoding = "async";
       img.alt = c.name + " 示意图";
       img.src = c.image || PLACEHOLDER;
       img.addEventListener("error", function () {

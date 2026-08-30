@@ -25,7 +25,7 @@ ENV_FILE = Path(r"D:/project/mcp-servers/zhipu-vision/.env")
 API = "https://open.bigmodel.cn/api/paas/v4/images/generations"
 MODEL = "cogview-3-flash"
 SIZE = "1024x1024"
-OUT_SIZE = 640  # 下载后缩放，控制仓库体积
+OUT_SIZE = 640  # 下载后缩放并转 WebP，控制仓库体积与页面加载
 
 # 中文名 -> 文件名 slug（未列出的走自动规则或 c{序号}）
 SLUG_MAP = {
@@ -139,9 +139,9 @@ def build_prompt(c):
 def gen_one(c, key):
     if c.get("image"):
         return c["id"], "skip"
-    out = IMG_DIR / f"{c['id']}.png"
+    out = IMG_DIR / f"{c['id']}.webp"
     if out.exists():
-        c["image"] = f"images/{c['id']}.png"
+        c["image"] = f"images/{c['id']}.webp"
         return c["id"], "exists"
     body = json.dumps(
         {"model": MODEL, "prompt": build_prompt(c), "size": SIZE}
@@ -167,7 +167,7 @@ def gen_one(c, key):
             raw = base64.b64decode(b64) if b64 else raw
             out.write_bytes(raw)
             resize(out)
-            c["image"] = f"images/{c['id']}.png"
+            c["image"] = f"images/{c['id']}.webp"
             return c["id"], "ok"
         except Exception as e:  # 网络错误、限流、内容审核拒绝都重试后放弃
             last_err = f"{getattr(e, 'code', '')} {e}"
@@ -181,7 +181,8 @@ def resize(path):
 
     with Image.open(path) as im:
         im = im.convert("RGB").resize((OUT_SIZE, OUT_SIZE), Image.LANCZOS)
-        im.save(path, "PNG", optimize=True)
+        im.save(path.with_suffix(".webp"), "WEBP", quality=82, method=6)
+    path.unlink()  # 删除原始 PNG，只保留 WebP
 
 
 def save(concepts):

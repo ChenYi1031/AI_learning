@@ -197,6 +197,8 @@ body {
   cursor: pointer;
   transition: var(--transition);
   animation: cardIn 0.4s ease backwards;
+  content-visibility: auto;          /* 视口外的卡片跳过渲染，滚动更顺 */
+  contain-intrinsic-size: auto 420px;
 }
 
 @keyframes cardIn {
