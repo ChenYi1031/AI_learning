@@ -1,0 +1,499 @@
+[
+  {
+    "category": "大模型基础",
+    "name": "Transformer",
+    "description": "当前主流大模型的基础架构，核心是自注意力机制，能并行处理序列数据。",
+    "id": "transformer",
+    "image": "images/transformer.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "自注意力机制（Self-Attention）",
+    "description": "让模型关注输入序列中不同位置的关系，通过 Q、K、V 计算权重。",
+    "id": "self-attention",
+    "image": "images/self-attention.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Encoder-Decoder / Decoder-only / Encoder-only",
+    "description": "不同模型架构，GPT 属于 Decoder-only，适合生成任务。",
+    "id": "encoder-decoder",
+    "image": "images/encoder-decoder.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Token",
+    "description": "模型处理文本的最小单位，一个汉字或英文子词都可能是一个 token。",
+    "id": "token",
+    "image": "images/token.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Tokenizer",
+    "description": "将文本转换为 token ID 的工具，常见算法有 BPE、WordPiece。",
+    "id": "tokenizer",
+    "image": "images/tokenizer.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Embedding",
+    "description": "将 token 映射为稠密向量，用于表示语义，可用于相似度计算。",
+    "id": "embedding",
+    "image": "images/embedding.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "余弦相似度",
+    "description": "衡量两个向量方向相似程度的指标，常用于检索。",
+    "id": "cosine-similarity",
+    "image": "images/cosine-similarity.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Temperature",
+    "description": "控制生成随机性的参数，越高越随机，越低越确定。",
+    "id": "temperature",
+    "image": "images/temperature.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Top-p（核采样）",
+    "description": "从累计概率前 p 的 token 中采样，平衡多样性和质量。",
+    "id": "top-p",
+    "image": "images/top-p.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Top-k",
+    "description": "只从概率最高的 k 个 token 中采样。",
+    "id": "top-k",
+    "image": "images/top-k.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Prompt Engineering",
+    "description": "通过设计提示词引导模型输出，包括角色设定、少样本、思维链等。",
+    "id": "prompt-engineering",
+    "image": "images/prompt-engineering.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "思维链（Chain of Thought, CoT）",
+    "description": "让模型一步步推理，提升复杂问题的准确性。",
+    "id": "chain-of-thought",
+    "image": "images/chain-of-thought.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "ReAct 模式",
+    "description": "推理 + 行动交替进行，是 Agent 的核心工作模式。",
+    "id": "react-pattern",
+    "image": "images/react-pattern.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "幻觉（Hallucination）",
+    "description": "模型生成看似合理但错误的内容，需要通过 RAG、校验等手段缓解。",
+    "id": "hallucination",
+    "image": "images/hallucination.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "上下文窗口（Context Window）",
+    "description": "模型一次能处理的最大 token 数，超出需要截断或摘要。",
+    "id": "context-window",
+    "image": "images/context-window.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "Function Calling",
+    "description": "让模型输出结构化函数调用请求，以便执行外部工具。",
+    "id": "function-calling",
+    "image": "images/function-calling.png"
+  },
+  {
+    "category": "大模型基础",
+    "name": "模型选型",
+    "description": "根据成本、延迟、能力选择合适的大模型（如 GPT-4o、DeepSeek、Qwen 等）。",
+    "id": "model-selection",
+    "image": "images/model-selection.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "Agent",
+    "description": "由 LLM、规划、工具、记忆、行动循环组成的自主智能体。",
+    "id": "agent",
+    "image": "images/agent.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "规划（Planning）",
+    "description": "将复杂任务拆解为子任务，常见方法有 Plan-and-Execute、Reflexion。",
+    "id": "planning",
+    "image": "images/planning.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "工具调用（Tool Use）",
+    "description": "Agent 通过调用外部 API、函数来获取信息或执行操作。",
+    "id": "tool-use",
+    "image": "images/tool-use.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "工具描述（JSON Schema）",
+    "description": "定义工具的名称、参数、功能，帮助模型准确调用。",
+    "id": "json-schema-tools",
+    "image": "images/json-schema-tools.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "ReAct 循环",
+    "description": "Thought → Action → Observation 的循环，直到生成最终答案。",
+    "id": "react-loop",
+    "image": "images/react-loop.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "短期记忆",
+    "description": "当前对话上下文，受 token 限制，需管理。",
+    "id": "short-term-memory",
+    "image": "images/short-term-memory.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "长期记忆",
+    "description": "将历史信息存入向量数据库，检索相关记忆注入 prompt。",
+    "id": "long-term-memory",
+    "image": "images/long-term-memory.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "工作记忆",
+    "description": "当前任务状态、中间结果，用于多步骤任务。",
+    "id": "working-memory",
+    "image": "images/working-memory.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "多 Agent 协作",
+    "description": "多个 Agent 分工合作，通过消息传递或共享状态完成复杂任务。",
+    "id": "multi-agent",
+    "image": "images/multi-agent.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "死循环保护",
+    "description": "设置最大步数、超时、重复检测等机制防止 Agent 无限循环。",
+    "id": "loop-guard",
+    "image": "images/loop-guard.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "反思（Reflexion）",
+    "description": "让 Agent 分析失败原因，重新尝试，提高成功率。",
+    "id": "reflexion",
+    "image": "images/reflexion.png"
+  },
+  {
+    "category": "AI Agent 核心",
+    "name": "自我批评（Self-Critique）",
+    "description": "Agent 对自己的输出进行评价和改进。",
+    "id": "self-critique",
+    "image": "images/self-critique.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "RAG（Retrieval-Augmented Generation）",
+    "description": "检索相关文档作为上下文，让模型基于文档生成答案，减少幻觉。",
+    "id": "rag",
+    "image": "images/rag.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "文档解析",
+    "description": "从 PDF、Word、HTML 等提取文本，处理表格、图片等。",
+    "id": "document-parsing",
+    "image": "images/document-parsing.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "分块（Chunking）",
+    "description": "将长文档切成小块，便于检索，常见 chunk size 256-1024 token，有重叠。",
+    "id": "chunking",
+    "image": "images/chunking.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "Embedding 模型",
+    "description": "将文本块向量化，如 text-embedding-ada-002、bge 系列。",
+    "id": "embedding-model",
+    "image": "images/embedding-model.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "向量数据库",
+    "description": "存储和检索向量，如 FAISS、Chroma、Milvus、pgvector。",
+    "id": "vector-database",
+    "image": "images/vector-database.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "近似最近邻（ANN）",
+    "description": "高效检索相似向量的算法，牺牲少量精度换取速度。",
+    "id": "ann",
+    "image": "images/ann.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "混合检索",
+    "description": "结合向量检索和关键词检索（BM25），提升召回率。",
+    "id": "hybrid-search",
+    "image": "images/hybrid-search.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "重排（Rerank）",
+    "description": "用 Cross-Encoder 对初检结果重新排序，提高精度。",
+    "id": "rerank",
+    "image": "images/rerank.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "查询改写",
+    "description": "将用户问题改写成更适合检索的形式，提升召回。",
+    "id": "query-rewrite",
+    "image": "images/query-rewrite.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "HyDE",
+    "description": "让 LLM 生成假设答案，再用假设答案检索，提升相关性。",
+    "id": "hyde",
+    "image": "images/hyde.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "上下文压缩",
+    "description": "过滤掉无关 chunk，减少输入 token。",
+    "id": "context-compression",
+    "image": "images/context-compression.png"
+  },
+  {
+    "category": "RAG 检索增强生成",
+    "name": "RAG 评估",
+    "description": "使用 RAGAS 等工具评估答案忠实度、相关性、上下文召回率。",
+    "id": "rag-evaluation",
+    "image": "images/rag-evaluation.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "LangChain",
+    "description": "主流 LLM 应用开发框架，提供 Chain、Agent、Memory、Retriever 等抽象。",
+    "id": "langchain",
+    "image": "images/langchain.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "LangGraph",
+    "description": "基于状态图的 Agent 工作流框架，适合有环、条件分支的复杂流程。",
+    "id": "langgraph",
+    "image": "images/langgraph.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "LCEL（LangChain Expression Language）",
+    "description": "用管道符 | 串联组件，声明式构建链。",
+    "id": "lcel",
+    "image": "images/lcel.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "LlamaIndex",
+    "description": "专注于数据索引和检索的框架，提供多种 QueryEngine。",
+    "id": "llamaindex",
+    "image": "images/llamaindex.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "AutoGen",
+    "description": "微软开源的多 Agent 对话框架，支持 GroupChat。",
+    "id": "autogen",
+    "image": "images/autogen.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "CrewAI",
+    "description": "角色化多 Agent 编排框架，用 Crew、Agent、Task 构建流水线。",
+    "id": "crewai",
+    "image": "images/crewai.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "MCP（Model Context Protocol）",
+    "description": "Anthropic 推出的标准化协议，统一 Agent 与外部工具的连接。",
+    "id": "mcp",
+    "image": "images/mcp.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "Dify / Coze",
+    "description": "低代码 Agent 构建平台，适合快速原型。",
+    "id": "dify-coze",
+    "image": "images/dify-coze.png"
+  },
+  {
+    "category": "开发框架与工具",
+    "name": "OpenAI API / DeepSeek API",
+    "description": "调用大模型服务的接口，需理解请求/响应格式。",
+    "id": "llm-api",
+    "image": "images/llm-api.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "Python 基础",
+    "description": "变量、函数、类、异常处理、装饰器、生成器、类型提示、虚拟环境。",
+    "id": "python-basics",
+    "image": "images/python-basics.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "FastAPI",
+    "description": "高性能 Python Web 框架，支持异步、依赖注入、自动文档。",
+    "id": "fastapi",
+    "image": "images/fastapi.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "Pydantic",
+    "description": "数据校验和序列化库，定义请求/响应模型。",
+    "id": "pydantic",
+    "image": "images/pydantic.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "异步编程（asyncio）",
+    "description": "使用 async/await 实现并发，提升 IO 密集型任务效率。",
+    "id": "asyncio",
+    "image": "images/asyncio.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "HTTP 请求与重试",
+    "description": "使用 requests/httpx 调用外部 API，实现重试、超时、错误处理。",
+    "id": "http-retry",
+    "image": "images/http-retry.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "PostgreSQL",
+    "description": "业务数据存储，支持 JSON、全文检索。",
+    "id": "postgresql",
+    "image": "images/postgresql.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "Redis",
+    "description": "缓存对话状态、限流、分布式锁。",
+    "id": "redis",
+    "image": "images/redis.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "SQLAlchemy",
+    "description": "Python ORM，操作关系型数据库。",
+    "id": "sqlalchemy",
+    "image": "images/sqlalchemy.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "Docker",
+    "description": "容器化部署，编写 Dockerfile 和 docker-compose。",
+    "id": "docker",
+    "image": "images/docker.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "日志与监控",
+    "description": "记录 LLM 调用 token、延迟、工具调用参数，便于排查。",
+    "id": "logging-monitoring",
+    "image": "images/logging-monitoring.png"
+  },
+  {
+    "category": "工程与后端",
+    "name": "容错与降级",
+    "description": "工具调用失败重试、超时熔断、备用模型切换。",
+    "id": "fault-tolerance",
+    "image": "images/fault-tolerance.png"
+  },
+  {
+    "category": "Java 相关",
+    "name": "Spring Boot",
+    "description": "Java 主流 Web 框架，注解驱动，快速开发 REST API。",
+    "id": "spring-boot",
+    "image": "images/spring-boot.png"
+  },
+  {
+    "category": "Java 相关",
+    "name": "Feign / RestTemplate",
+    "description": "Java 服务间 HTTP 调用，可用于调用 Python 模型服务。",
+    "id": "feign-resttemplate",
+    "image": "images/feign-resttemplate.png"
+  },
+  {
+    "category": "Java 相关",
+    "name": "JVM 内存模型",
+    "description": "堆、栈、方法区，垃圾回收机制。",
+    "id": "jvm-memory",
+    "image": "images/jvm-memory.png"
+  },
+  {
+    "category": "Java 相关",
+    "name": "HashMap 原理",
+    "description": "哈希表实现，扩容、链表/红黑树转换。",
+    "id": "hashmap",
+    "image": "images/hashmap.png"
+  },
+  {
+    "category": "Java 相关",
+    "name": "Java 多线程",
+    "description": "线程池、synchronized、volatile、并发工具类。",
+    "id": "java-concurrency",
+    "image": "images/java-concurrency.png"
+  },
+  {
+    "category": "项目实战概念",
+    "name": "智能知识库问答 Agent",
+    "description": "RAG + 工具调用的典型应用，支持文档上传、检索问答、引用来源。",
+    "id": "kb-qa-agent",
+    "image": "images/kb-qa-agent.png"
+  },
+  {
+    "category": "项目实战概念",
+    "name": "自动化工作流 Agent",
+    "description": "多工具协作，如查天气、写报告、发邮件，体现规划和工具调用。",
+    "id": "workflow-agent",
+    "image": "images/workflow-agent.png"
+  },
+  {
+    "category": "项目实战概念",
+    "name": "项目架构设计",
+    "description": "用架构图描述服务组成、数据流、组件交互。",
+    "id": "project-architecture",
+    "image": "images/project-architecture.png"
+  },
+  {
+    "category": "项目实战概念",
+    "name": "难点与优化",
+    "description": "如 chunk size 调优、混合检索、查询改写、成本控制。",
+    "id": "challenges-optimization",
+    "image": "images/challenges-optimization.png"
+  },
+  {
+    "category": "项目实战概念",
+    "name": "评估指标",
+    "description": "准确率、召回率、响应时间、单次查询成本。",
+    "id": "evaluation-metrics",
+    "image": "images/evaluation-metrics.png"
+  }
+]
