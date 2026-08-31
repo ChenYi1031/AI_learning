@@ -1,0 +1,388 @@
+[
+  {
+    "id": "mysql-index",
+    "category": "数据库与中间件",
+    "name": "MySQL 索引与查询优化",
+    "summary": "B+树是索引的心脏：懂聚簇、回表、覆盖索引、最左前缀，EXPLAIN 就是开卷考试。",
+    "description": "InnoDB 的索引即 B+树：矮胖多叉（3 层可容纳千万行），数据全在叶子节点且叶子间有链表相连。主键索引（聚簇索引）的叶子存整行数据；二级索引的叶子只存主键值，命中后需要拿主键回聚簇索引再查一次（回表）。如果查询的列全部包含在索引里（覆盖索引），就免回表，是最快的姿势。联合索引按最左前缀匹配——(a,b,c) 索引能服务 a / a,b / a,b,c 的查询，遇范围查询后面的列失效。慢查询优化标准流程：慢日志定位 → EXPLAIN 看执行计划（type、rows、Extra 三列是关键）→ 加索引或改写法。",
+    "background": "B+树 1970 年代从 B 树演化而来：把数据全部下沉到叶子并加链表，范围扫描从此顺着链表走即可。InnoDB 的一个巧妙设定是主键即数据的物理组织顺序——所以自增主键写入是顺序追加（快），随机主键（如 UUID）会导致页分裂（慢），这是建表第一个要做的决定。『MySQL 索引失效十大场景』是面试保留节目，本质都是让优化器无法走树的有序性：对索引列用函数、隐式类型转换、like 以 % 开头、最左列缺失、隐式 or 连接非索引列。",
+    "problem": "解决『数据量上来之后查询慢到不可用』的问题：对话日志表 2000 万行，没有索引的查询是全表扫描（10 秒+）；加对 (session_id, created_at) 联合索引后毫秒级。索引的代价是把读的性能提前支付在写时（每次写入要维护全部索引）——所以索引也不是越多越好。",
+    "analogy": "B+树像图书馆的分级目录卡：先查大类（根节点）→ 再到架子（中间节点）→ 最后是书（叶子）。聚簇索引 = 书就按这套目录排架，摸到目录卡就摸到了书；二级索引 = 另一套按作者排的目录卡，卡片上只写『本书在主目录的编号』，要再看一眼主目录才能拿到书（回表）；覆盖索引 = 作者目录卡上连出版年份都印了，不用再跑主目录。",
+    "points": [
+      "联合索引设计口诀：等值条件列放前面，范围条件列放最后，覆盖 SELECT 列最好",
+      "EXPLAIN 三看：type 出现 ALL=全表扫描；rows 是预估扫描行数；Extra 有 Using index=覆盖索引生效、Using filesort=排序没走索引",
+      "区分度低的列（如性别）单独建索引意义不大，优化器可能宁可全表扫"
+    ],
+    "pitfalls": [
+      "索引越多越好是错的：每个索引都有写放大，且索引太多时优化器可能选错",
+      "隐式类型转换：phone 是 varchar 却用 WHERE phone = 13800001234（数字）查——索引悄悄失效全表扫",
+      "深分页 LIMIT 1000000,10 要扫 100 万行再丢掉：用 WHERE id > 上次最大id 游标翻页或延迟关联"
+    ],
+    "applications": [
+      "对话历史查询：按 (session_id, created_at) 联合索引，会话回放毫秒级",
+      "LLM 调用日志分析：按 (team, created_at) 范围统计 token 成本",
+      "RAG 引用溯源：chunks 表按 (doc_id, chunk_seq) 定位原文位置",
+      "评测平台：按 (model, metric, run_date) 联合索引做横向对比"
+    ],
+    "example": {
+      "scenario": "对话日志表 2000 万行，查某会话最近 10 条消息要 8 秒。加联合索引后 3ms；改成游标分页后翻到任意深度都稳定 3ms——同一个表，两种命运。",
+      "code": "-- ① 建联合索引（等值在前，范围在后）\nALTER TABLE messages\n  ADD INDEX idx_session_time (session_id, created_at);\n\n-- ② 验证：type 应该是 ref/range，不再是 ALL\nEXPLAIN SELECT content FROM messages\n WHERE session_id = 'sess_42'\n ORDER BY created_at DESC LIMIT 10;\n-- Extra: Backward index scan = 排序也走了索引\n\n-- ③ 覆盖索引免回表：把 content 也放进索引\nALTER TABLE messages\n  ADD INDEX idx_cover (session_id, created_at, content);\n-- Extra: Using index -> 不再回表\n\n-- ④ 深分页优化：游标代替 OFFSET\nSELECT * FROM messages\n WHERE session_id = 'sess_42' AND id < 990000\n ORDER BY id DESC LIMIT 10;   -- 而不是 LIMIT 990000, 10"
+    },
+    "related": ["transaction-isolation", "mvcc", "postgresql", "sqlalchemy"],
+    "extended": "进阶方向：页分裂与自增主键、索引下推（ICP）、MySQL 与 PostgreSQL 索引实现差异、闪烁涌现的 hash join"
+  },
+  {
+    "id": "redis-data-structures",
+    "category": "数据库与中间件",
+    "name": "Redis 数据结构与应用场景",
+    "summary": "String/List/Hash/Set/ZSet 各管一类业务题：选对结构，一行命令顶百行代码。",
+    "description": "Redis 不只是『缓存』，是一个内存数据结构服务器，五种基础结构对应五类业务模式：String（缓存对象 JSON、计数器 INCR、分布式锁 SET NX）；List（时间线、简单消息列表，LPUSH+BRPOP）；Hash（对象字段级存取，购物车 userId→{skuId: 数量}）；Set（去重、标签、共同关注 SINTER）；ZSet（排行榜 ZINCRBY+ZREVRANGE、延迟队列 score 存时间戳）。进阶结构：Bitmap（签到/活跃，1 bit 一天）、HyperLogLog（亿级 UV 去重计数，误差 0.8%、固定 12KB）、Stream（5.0 的正规消息流，消费组支持）、GEO（附近的人）。",
+    "background": "2009 年 Salvatore Sanfilippo 为解决实时统计的性能问题写了 Redis，核心创新是用事件循环单线程串行执行命令——内存操作本身微秒级，省掉锁竞争反而最快（6.0 引入多线程但只用于网络 IO，命令执行仍单线程）。ZSet 底层是跳表（Skiplist）+哈希表双结构：跳表提供 O(logN) 有序范围查询，比平衡树实现简单得多。2020 年代 Redis 的定位从缓存工具扩展为实时数据平台（RedisJSON、向量搜索模块）。",
+    "problem": "解决『内存态的实时计算在磁盘数据库里又慢又别扭』的问题：排行榜用 SQL 要 ORDER BY 全表+分页缓存；签到用行存储一人一年 365 行；亿级 UV 去重要么爆内存要么算不准。Redis 的每种结构都是为某一类实时计算量身定制的——选对结构，问题就变成一行命令。",
+    "analogy": "Redis 是一个工具箱而不是一把锤子：String 是尺子（什么都能量：缓存/计数/锁），List 是出票口（先到先取），Hash 是证件夹（按人存多页信息），Set 是到场签到表（只记谁来没来、能查共同到场），ZSet 是自动排序的领奖台（分数一变名次立刻对）。",
+    "points": [
+      "ZSet = 排行榜/延迟队列的万能钥匙：member 唯一 + score 排序，ZINCRBY 原子加分",
+      "Set 的交并差（SINTER/SDIFF）把社交关系计算从应用代码下沉到数据层",
+      "TTL 是 key 级别的：Hash 内的 field 不能单独过期——需要字段级过期就拆 key 或用 ZSet 存过期时间"
+    ],
+    "pitfalls": [
+      "大 key 事故：百万成员的 Set/ZSet 用 DEL 删除会阻塞主线程几百毫秒——用 UNLINK 异步删除，用 SCAN 渐进遍历",
+      "把 Redis 当主数据库——内存贵且持久化有窗口，Redis 存热数据，真相永远在 MySQL/PG",
+      "忽略 maxmemory 淘汰策略：默认 noeviction 写满报错，缓存场景该用 allkeys-lru 但别让锁 key 被误驱逐"
+    ],
+    "applications": [
+      "排行榜：ZINCRBY 加分 + ZREVRANGE 取 Top100，O(logN) 实时更新",
+      "签到日历：SETBIT key 天偏移 1，BITCOUNT 统计月活跃，365 天只占 46 字节",
+      "延迟任务：ZADD 时间戳为 score，轮询 ZRANGEBYSCORE 取到期任务",
+      "LLM 应用：对话 ID→摘要的 Hash 缓存、embedding 相似去重的 Set、API 限流的 String 计数"
+    ],
+    "example": {
+      "scenario": "三行命令实现实时排行榜：用户答题加分 ZINCRBY，取前十 ZREVRANGE 带分数，查某人排名 ZREVRANK——不需要 ORDER BY，不需要缓存失效，百万用户下依然是微秒级。",
+      "code": "import redis\n\nr = redis.Redis(decode_responses=True)\n\n# ① 排行榜（ZSet）\nr.zincrby('leaderboard', 10, 'user:42')     # user42 +10 分\nr.zincrby('leaderboard', 25, 'user:7')\ntop3 = r.zrevrange('leaderboard', 0, 2, withscores=True)\nprint(top3)                                   # [(user:7, 25.0), (user:42, 10.0)]\nprint('我的排名:', r.zrevrank('leaderboard', 'user:42'))  # 1（0 起）\n\n# ② 延迟队列（ZSet，score=执行时间戳）\nimport time\nr.zadd('delay_queue', {'task:send_mail:1001': time.time() + 3600})\ndue = r.zrangebyscore('delay_queue', 0, time.time(), start=0, num=5)\n\n# ③ 签到（Bitmap）：一年 365 天仅 46 字节\nr.setbit('checkin:42', 240, 1)               # 第 241 天签到\nprint('本月签到天数:', r.bitcount('checkin:42'))"
+    },
+    "related": ["redis", "cache-strategies", "distributed-lock", "message-queue"],
+    "extended": "进阶方向：跳表原理（为什么不用红黑树）、对象编码演进（ziplist→listpack）、Redis 7 Function 与 Lua、大 key 排查（redis-cli --bigkeys）"
+  },
+  {
+    "id": "cache-strategies",
+    "category": "数据库与中间件",
+    "name": "缓存模式与三大经典问题",
+    "summary": "Cache Aside 是默认姿势；穿透/击穿/雪崩是三道必考题，每题都有标准解法。",
+    "description": "Cache Aside Pattern（旁路缓存）：读请求先查缓存，未命中查库并回填；写请求先更新数据库，再删除缓存（不是更新缓存——懒加载思想：下次读时才回填，避免写了却没人读的浪费）。引入缓存后新增三个经典故障模式：缓存穿透（查询根本不存在的数据，缓存永不命中，全部打穿到库）→ 解法：空值缓存（短 TTL）+ 布隆过滤器前置拦截；缓存击穿（一个热点 key 过期的瞬间，海量并发同时打到库）→ 解法：互斥锁重建（只放一个请求去查库）+ 逻辑过期；缓存雪崩（大量 key 同时过期或 Redis 宕机）→ 解法：过期时间加随机抖动 + 多级缓存 + 熔断降级。一致性：『先库后删缓存』+ 延迟双删或订阅 binlog（Canal）异步删，达成最终一致。",
+    "background": "缓存分层思想来自计算机体系结构（CPU L1/L2/L3 cache 本质就是 Cache Aside）。分布式缓存时代 2003 年 Memcached 开启先河，2009 年 Redis 接棒。『穿透/击穿/雪崩』三题是国内互联网生产事故与面试的共同高频——几乎每个上量的业务系统都至少踩过其中一个。布隆过滤器 1970 年提出：用极小空间判断『一定不存在或可能存在』，是穿透防护的标准件。",
+    "problem": "解决『数据库扛不住读 QPS，但引入缓存又引入新故障面』的两难：LLM 应用里 FAQ 答案、embedding 结果、用户配置天天被重复查询——不缓存数据库先死；乱缓存则一致性问题接踵而至。这套模式集把『用缓存』升级为『可信赖地用缓存』。",
+    "analogy": "缓存像前台桌上的常用文件夹：老板（数据库）的档案柜不用每次都被翻。穿透=有人反复问根本不存在的档案，前台每次白跑一趟——贴一张『此档案不存在』的便签就好；击穿=唯一一份热门文件到期的瞬间，全公司同时冲向档案柜——派一个人去取，其他人等他；雪崩=前台桌整个被撤掉，所有请求同一秒涌向档案柜——每份文件的到期时间错开。",
+    "points": [
+      "写路径用『更新库 + 删缓存』而不是『更新缓存』：避免写多读少白白计算、避免并发写乱序",
+      "布隆过滤器的语义是『一定不存在 / 可能存在』——说可能存在仍要查库，它的价值是拦住确定不存在的 99%",
+      "过期时间加随机抖动（如 30min±5min）是零成本防雪崩，任何缓存都该默认带上"
+    ],
+    "pitfalls": [
+      "先删缓存再更新库：并发下另一个读请求会把旧值重新回填——顺序必须是先库后删",
+      "幻想缓存与数据库强一致：只要有并发就有窗口期，目标是最终一致（毫秒级窗口通常可接受）",
+      "空值缓存不设短 TTL：穿透防护变成垃圾堆积，空值 TTL 建议 30~60 秒"
+    ],
+    "applications": [
+      "LLM 语义缓存：相同/相似问题直接复用答案（省 token 成本的核心手段）",
+      "embedding 结果缓存：同一段文本的向量化只算一次",
+      "商品/文章详情页：热点数据 Cache Aside + 逻辑过期",
+      "配置热更新：本地缓存 + Redis 发布变更通知（观察者模式）"
+    ],
+    "example": {
+      "scenario": "知识库问答上线缓存后成本降 40%，两周后突然数据库 CPU 100%：排查发现某冷门问题（库里也没有）被脚本疯狂请求，全部穿透——加空值缓存 + 布隆过滤器后恢复。三大问题不来则已，来的时候都是生产事故。",
+      "code": "import redis, json, time, random\nr = redis.Redis(decode_responses=True)\n\ndef get_data(key, db_query):\n    # ① 读缓存\n    val = r.get('cache:' + key)\n    if val is not None:\n        return json.loads(val) if val != 'NULL' else None  # 空值缓存拦截穿透\n\n    # ② 击穿防护：互斥锁，只放一个请求去查库\n    lock = r.set('lock:' + key, '1', nx=True, ex=10)\n    if not lock:\n        time.sleep(0.05)               # 别人正在重建，稍等重试\n        return get_data(key, db_query)\n    try:\n        data = db_query(key)\n        ttl = 1800 + random.randint(0, 300)   # ③ 防雪崩：TTL 加抖动\n        r.set('cache:' + key,\n              json.dumps(data) if data is not None else 'NULL',\n              ex=60 if data is None else ttl) # 空值短TTL\n        return data\n    finally:\n        r.delete('lock:' + key)        # 释放重建锁\n\ndef update_data(key, value):\n    db.update(key, value)      # ④ 写路径：先更新库\n    r.delete('cache:' + key)   # 再删缓存（下次读回填），绝不更新缓存"
+    },
+    "related": ["redis", "distributed-lock", "fault-tolerance", "postgresql"],
+    "extended": "进阶方向：布隆过滤器原理与误判率计算、Canal 订阅 binlog 异步删缓存、多级缓存（Caffeine+Redis）、『延迟双删』的争议"
+  },
+  {
+    "id": "distributed-lock",
+    "category": "数据库与中间件",
+    "name": "分布式锁",
+    "summary": "多实例并发的唯一通行证：SET NX EX 一步起步，看门狗续期才是生产级。",
+    "description": "单机锁（synchronized、threading.Lock）只在进程内有效，应用多实例部署后需要跨进程互斥——这就是分布式锁。Redis 实现三要素：① 加锁必须原子：SET key uniqueValue NX EX 30（NX=不存在才能设置，EX=必带过期防死锁，uniqueValue=持有者身份）；② 释放必须校验身份：用 Lua 脚本『value 匹配才删除』，防止超时后误删别人的锁；③ 看门狗续期：业务没跑完锁先到期会引发并发，Redisson 等客户端用后台线程自动续期。更稳的替代方案：数据库乐观锁（版本号，适合低频）、ZooKeeper/etcd 临时顺序节点（公平锁+会话保活）。",
+    "background": "远古时代 SETNX 和 EXPIRE 是两条命令，中间宕机就是永久死锁——Redis 2.6.12 合并为 SET NX EX 一步原子操作。2014 年 Redis 作者提出 Redlock（多节点多数派加锁），随后被分布式系统名家 Martin Kleppmann 著名长文批驳（时钟跳变会让多数派失效），这场争论是分布式系统的必读经典——结论：Redlock 适用于效率锁（防重复执行），正确性要求极高的场景用 fencing token 或共识系统。",
+    "problem": "解决『同一时刻只允许一个执行者』在多实例环境的落地问题：定时任务三台机器都部署了，凌晨不该跑三次；缓存击穿时重建请求有 500 个并发；秒杀预扣库存不能超卖——这些『互斥』需求单机锁管不到，必须有一个所有实例都认可的仲裁者。",
+    "analogy": "像会议室预约系统：拿到锁=订到房间（NX=没被订才能订）；EX=预约到点自动释放（人走了不退房也不能永久占着）；看门狗=快到点自动续订（会还没开完房间不能被抢）；Lua 校验身份=退房时核对预约人，不能退掉别人订的房间。",
+    "points": [
+      "加锁三要素缺一不可：NX（互斥）+ EX（防死锁）+ 唯一 value（防误删）",
+      "锁粒度要小：锁『库存行 42』而不是锁『整个下单流程』，锁内更不要调 LLM 这类慢 IO",
+      "看门狗是生产标配：默认过期 30 秒 + 每 10 秒自动续期，业务结束才停"
+    ],
+    "pitfalls": [
+      "以为加了锁就线程安全——锁只保护互斥段，锁外的共享状态该并发还是并发",
+      "锁过期时间拍脑袋 30 秒，业务跑了 31 秒——两个实例同时在临界区，等于没锁",
+      "释放锁直接 DEL 不校验 value——A 的锁过期后被 B 拿到，A 干完活把 B 的锁删了"
+    ],
+    "applications": [
+      "定时任务防重：三实例部署的日报 Agent 只跑一份（本站工具链的同款问题）",
+      "秒杀预扣库存：Redis 锁+Lua 保证检查-扣减原子（见秒杀实战）",
+      "缓存击穿重建：互斥锁只放一个请求回源查库",
+      "防重复回调：支付回调/第三方 webhook 的幂等兜底"
+    ],
+    "example": {
+      "scenario": "日报 Agent 部署在 3 台机器，每天 8 点都该只有一台执行。用 SET NX EX 加锁：抢到的跑任务，没抢到的直接退出；任务可能跑 40 分钟，看门狗线程每 10 秒续期；结束后 Lua 校验自己的身份再释放——三台机器永远只有一份日报。",
+      "code": "import redis, threading, uuid, time\n\nr = redis.Redis(decode_responses=True)\n\ndef distributed_lock(key, ttl=30):\n    '''返回 (锁, 释放函数)。三要素：NX + EX + 唯一 value'''\n    value = str(uuid.uuid4())          # 持有者身份\n    ok = r.set(key, value, nx=True, ex=ttl)\n    if not ok:\n        return None, None\n\n    stop = threading.Event()\n    def watchdog():                    # 看门狗：业务没完锁不过期\n        while not stop.wait(ttl / 3):\n            r.eval('''\n                if redis.call('get', KEYS[1]) == ARGV[1]\n                then return redis.call('expire', KEYS[1], ARGV[2])\n                else return 0 end''',\n                1, key, value, ttl)\n    threading.Thread(target=watchdog, daemon=True).start()\n\n    def release():\n        stop.set()\n        r.eval('''                      # Lua 校验身份才删，防误删\n            if redis.call('get', KEYS[1]) == ARGV[1]\n            then return redis.call('del', KEYS[1])\n            else return 0 end''',\n            1, key, value)\n    return True, release\n\nok, release = distributed_lock('agent:daily:2026-08-31')\nif not ok:\n    exit(0)                            # 别的实例已在跑\ntry:\n    run_daily_report()\nfinally:\n    release()"
+    },
+    "related": ["redis", "cache-strategies", "transaction-isolation", "workflow-agent"],
+    "extended": "进阶方向：Redisson 看门狗实现、Redlock 之争（Kleppmann vs antirez 两篇原文对读）、etcd lease 与公平锁、fencing token"
+  },
+  {
+    "id": "message-queue",
+    "category": "数据库与中间件",
+    "name": "消息队列",
+    "summary": "解耦、削峰、异步三件套：把『必须现在做完』变成『排个队慢慢做』。",
+    "description": "消息队列（MQ）的三大价值：异步（主流程完成后发个消息就走，短信/积分等旁路操作由消费者慢慢做）、解耦（订单系统发一条『订单已创建』，不需要知道谁关心它）、削峰（洪峰流量先入队，消费端按自己的能力消化）。主流选型：Kafka（高吞吐日志流，顺序写磁盘+零拷贝，百万级 TPS，大数据管道标配）、RabbitMQ（低延迟+灵活路由，万级 TPS，业务消息友好）、RocketMQ（事务消息+延迟消息，电商场景）。核心概念：producer/broker/consumer、topic（逻辑主题）、partition（物理分区，组内消费的基本单位）、offset（消费位点）、消费者组（组内分区独占，扩容消费者到分区数为止）。",
+    "background": "解耦思想可追溯到 1980 年代操作系统的消息队列；企业级起步于 IBM MQ（1990 年代金融系统）。2011 年 LinkedIn 开源 Kafka 重新定义高吞吐：顺序写磁盘接近内存速度、零拷贝 sendfile、批量压缩——『慢的磁盘』靠顺序访问打脸直觉。国内 RocketMQ（阿里，事务消息/延迟消息特色）和 Pulsar（存算分离）补充了不同生态。LLM 时代的新舞台：批量 embedding、评测任务、报告生成——凡是慢 IO 都适合挪进队列。",
+    "problem": "解决『同步调用链的脆弱性』问题：下单接口同步调用积分、短信、风控三个下游，任何一个慢一秒整体慢一秒，任何一个挂了整体失败；秒杀洪峰 10 万 QPS 直打数据库必死。MQ 把『同时发生』解成『先后消化』：系统吞吐不再由最慢环节决定，而由队列的缓冲能力决定。",
+    "analogy": "银行取号机：客户（生产者）拿号就走，不必站在柜台前等；柜台（消费者）按叫号处理；大堂（队列）天然削峰——就算来 500 人，柜台按节奏叫号就行。多个窗口（分区）并行处理；同一张号码牌绝不会被两个窗口同时叫到（组内分区独占）。",
+    "points": [
+      "MQ 解决的是『时间维度的不匹配』，不是加速器——多一跳反而增加延迟，同步短链路别硬上",
+      "分区（partition）是并行的单位：分区内严格有序，全局无序；要某类消息全局有序就按 key 路由到同一分区",
+      "消费者组扩容有上限：消费者数 > 分区数时多出来的闲置——分区数要提前按吞吐规划"
+    ],
+    "pitfalls": [
+      "把 MQ 当同步 RPC 用：发消息再傻等回复，复杂度翻倍不如直接调用",
+      "无界堆积不监控：消费能力 < 生产能力时磁盘和延迟双双爆炸，堆积量必须有告警",
+      "消息体塞大对象：一张 5MB 的图片塞进消息，broker 和网络都遭殃——传 ID 引用，数据放对象存储"
+    ],
+    "applications": [
+      "LLM 批量任务异步化：10 万篇文档摘要、评测跑批，提交即返回任务 ID",
+      "用户行为埋点流：前端事件→Kafka→数仓，LLM 应用自己的使用分析",
+      "通知分发：报告生成完毕→MQ 广播→邮件/飞书/短信各自消费",
+      "Agent 事件驱动：工具执行结果入队，下游 Agent 按需订阅"
+    ],
+    "example": {
+      "scenario": "用户上传 1000 份 PDF 要做摘要：同步做要 40 分钟（HTTP 超时×N）。改成：接口收文件后每份发一条消息立刻返回任务 ID；消费者集群按分区并行调用 LLM；每完成一份更新进度表——前端轮询进度，用户体验从『转圈 40 分钟』变成『队列里还有 37 份』。",
+      "code": "# Kafka 最小生产/消费对（kafka-python）\nfrom kafka import KafkaProducer, KafkaConsumer\nimport json\n\nproducer = KafkaProducer(\n    bootstrap_servers='localhost:9092',\n    value_serializer=lambda v: json.dumps(v).encode())\n\n# 生产者：上传接口发完消息立刻返回（异步化）\nproducer.send('pdf-summary',\n              {'task_id': 't-1001', 'file_id': 42,\n               'priority': 'high'})\n\n# 消费者组：3 个实例自动分摊 6 个分区\nconsumer = KafkaConsumer(\n    'pdf-summary',\n    bootstrap_servers='localhost:9092',\n    group_id='summary-workers',       # 组内分区独占\n    enable_auto_commit=False,         # 手动 ack：处理完才提交\n    value_deserializer=lambda v: json.loads(v))\n\nfor msg in consumer:\n    task = msg.value\n    try:\n        summary = llm_summarize(task['file_id'])   # 慢 IO 在消费端\n        save_result(task['task_id'], summary)\n        consumer.commit()              # 处理完才确认位点（不丢消息）\n    except Exception:\n        handle_retry(task)             # 失败进重试/死信（见消息可靠性）"
+    },
+    "related": ["mq-delivery", "cache-strategies", "asyncio", "fault-tolerance"],
+    "extended": "进阶方向：Kafka 分区与再均衡机制、零拷贝 sendfile 原理、RocketMQ 延迟消息实现、Pulsar 存算分离架构"
+  },
+  {
+    "id": "mq-delivery",
+    "category": "数据库与中间件",
+    "name": "消息可靠性投递与幂等",
+    "summary": "『至少一次 + 幂等』是分布式消息的黄金组合：承认会重复，然后让重复无害。",
+    "description": "投递语义三档：至多一次（可能丢，性能最好）、至少一次（可能重复，主流默认）、精确一次（理论昂贵，Kafka 事务/幂等生产者只在限定场景实现）。工程目标因此修正为『不丢 + 重复无害』：生产端不丢——同步等 ack + 失败重试 + 本地消息表（业务与消息同事务落库，定时任务补偿发送）；消费端不丢——关闭自动提交，处理完才手动 ack，失败进重试队列，多次失败进死信队列（DLQ）并告警。重复不可避免 → 消费端幂等四板斧：数据库唯一约束、去重表、Redis SETNX 标记、状态机（只允许合法状态迁移）。",
+    "background": "两将军问题从理论上证明分布式可靠通信不可能完美——工程师的回答不是消除错误，而是定义语义并让重复无害。Kafka 0.11（2017）引入幂等生产者（PID+序列号去重）和事务 API；『本地消息表』是国内电商验证多年的朴素方案（一张表把业务数据和待发消息绑进同一事务）；RocketMQ 的事务消息是它的框架化版本（半消息+回查）。幂等的思想源头是 HTTP PUT 的幂等语义与数据库唯一约束。",
+    "problem": "解决『消息丢了造成资损、消息重了造成资损』的双向风险：下单成功但扣款消息丢了=少收钱；扣款消息重发一次=多扣钱。网络抖动、服务重启、消费者再平衡都会造成丢或重——放弃『绝不丢也绝不重』的幻想，转而保证『绝不丢，重复了也无所谓』。",
+    "analogy": "快递系统：包裹可能丢（所以要签收=ack），也可能重复投递（系统故障重发）。解决办法不是要求快递公司永远不出错，而是让收件人核对订单号（幂等键）：同一个订单号的包裹只拆一次，重复的直接拒收。丢件的包裹进入『异常件流程』（死信队列）而不是悄悄消失。",
+    "points": [
+      "先确认业务语义再选型：能丢的日志用至多一次（性能最好），碰钱的必须至少一次+幂等",
+      "幂等四板斧按成本从低到高：Redis SETNX 标记（快但可能误删）→ 数据库唯一约束（最可靠）→ 状态机（业务级防重）",
+      "死信队列不是垃圾桶：必须接告警 + 人工/定时补偿处理，否则丢消息只是从『丢在队列』变成『丢在死信』"
+    ],
+    "pitfalls": [
+      "自动 ack 模式：处理到一半崩溃，消息被确认——静默丢失，必须手动 ack",
+      "幂等键选错：用『时间戳+随机数』当键每次都不同等于没有幂等，要用业务天然键（订单号+操作类型）",
+      "消费失败立即无限重试：重试风暴打垮下游，要指数退避 + 最大次数 + 死信兜底"
+    ],
+    "applications": [
+      "API 计费扣款：按 (trace_id) 幂等，重试不重复扣费",
+      "订单状态机：只允许 待支付→已支付→已发货 的合法迁移，重复消息自动忽略",
+      "批量 embedding 任务断点续跑：任务 ID+分片号做幂等键",
+      "支付回调：第三方重复通知同一笔支付，唯一约束直接挡掉"
+    ],
+    "example": {
+      "scenario": "用户充值 100 元的回调消息到达两次（第三方重发）：消费端先查去重表发现 charge_id:1001 已处理过，直接 ack 跳过；如果第一次处理时服务崩溃没提交，第二次进来重新走业务，唯一约束保证余额只加一次。",
+      "code": "def consume_charge(msg):\n    charge_id = msg['charge_id']      # 业务幂等键：支付单号\n\n    # ① 幂等检查：Redis 快速挡 + 数据库唯一约束兜底\n    if not r.set('idem:charge:' + charge_id, 1, nx=True, ex=86400):\n        ack(msg)                      # 重复消息，直接确认跳过\n        return\n    try:\n        with db.transaction():        # ② 业务+去重记录同事务\n            db.insert('charge_log',    # 唯一约束 charge_id\n                      charge_id=charge_id,\n                      amount=msg['amount'])\n            db.execute(\n                'UPDATE balance SET amount = amount + %s '\n                'WHERE user_id = %s', msg['amount'], msg['user_id'])\n        ack(msg)                      # ③ 全部成功才确认\n    except Exception as e:\n        r.delete('idem:charge:' + charge_id)  # 失败释放幂等标记\n        if msg.attempts >= 5:\n            send_to_dlq(msg)          # ④ 死信队列 + 告警\n            ack(msg)\n        else:\n            raise                     # 触发重试（指数退避）"
+    },
+    "related": ["message-queue", "transaction-isolation", "fault-tolerance", "http-retry"],
+    "extended": "进阶方向：Kafka Exactly-Once 的能力边界、本地消息表的完整实现、RocketMQ 事务消息回查、两将军问题"
+  },
+  {
+    "id": "data-structures",
+    "category": "软件工程基础",
+    "name": "核心数据结构",
+    "summary": "数组/链表/哈希表/栈队列/堆/树——按最高频操作选结构，算法一半是白送的。",
+    "description": "每种数据结构的本质是三种操作（读/写/保持有序）之间的取舍：数组随机读 O(1) 但中间插删 O(n)；链表插删 O(1) 但只能顺着摸；哈希表查改均摊 O(1) 但无序；栈（后进先出）适合撤销/括号匹配/函数调用；队列（先进先出）适合排队/广度优先；双端队列两头都能进出（滑动窗口）；堆能在 O(logN) 内动态取最值（优先队列）；树类各有专长——二叉搜索树有序查找、B+树磁盘友好（数据库索引）、Trie 前缀匹配（自动补全/路由）。选择公式：列出操作的最高频动作，按复杂度表对号入座。",
+    "background": "『程序 = 数据结构 + 算法』（Niklaus Wirth，1984 图灵奖）。哈希表思想 1953 年就有，堆排序 1964 年 Floyd 提出。工程视角的关键认知：你天天都在用它们而不自知——Git 的提交历史是 DAG（有向无环图）、数据库索引是 B+树、浏览器的前进后退是双栈、JSON 是树、Redis ZSet 底层是跳表、Python dict 是哈希表。",
+    "problem": "用错结构的代价是数量级的：在 10 万元素的数组里反复做 contains 判断是 O(n²)（百亿次比较），换成 Set 就是 O(n)；用『每次排序取最大』实现优先队列是 O(nlogn)/次，堆只要 O(logN)/次。结构选对，算法常常就退化成几行代码。",
+    "analogy": "数组=火车（第 100 节车厢直达，但中间插一节要全部重挂）；链表=寻宝游戏（每条线索指向下一条，插入容易但找特定线索要从头走）；哈希表=报手机号找人（直接定位）；堆=公司职级表（永远一眼看到职级最高的人）；Trie=字典的索引页（按字母一层层翻）。",
+    "points": [
+      "选择口诀：频繁查找→哈希表；要保持有序→树/跳表；动态取最值→堆；只操作两端→双端队列；去重判断→集合",
+      "Big O 描述的是增长率不是绝对耗时：n=10 时 O(n²) 可能比 O(nlogn) 更快（常数项），数据量大时差距才爆炸",
+      "语言内置结构已经高度优化：先查官方文档确认没有现成的，再考虑手写"
+    ],
+    "pitfalls": [
+      "在 list 上做高频 in 判断（O(n) 每次）——换 set/frozenset 就是 O(1)",
+      "把可变对象（list/dict）当哈希表 key——Python 直接报错，Java 会静默丢失（hashCode 变了）",
+      "忽视哈希表的最坏情况 O(n)：被构造性碰撞攻击时退化（现代语言已随机化哈希缓解）"
+    ],
+    "applications": [
+      "Agent 工具注册表：名字→函数的哈希表，O(1) 调用",
+      "对话窗口管理：双端队列 deque，左侧过期右侧追加",
+      "检索 Top-k：维护大小为 k 的小顶堆，O(Nlogk) 扫完全量",
+      "自动补全/敏感词过滤：Trie 前缀树",
+      "本站的分类计数：字典一次遍历统计（Counter 思想）"
+    ],
+    "example": {
+      "scenario": "检索系统要『从 10 万条结果里取相似度最高的 5 条』：先全排序是 O(NlogN)；用大小为 5 的小顶堆，新结果比堆顶大就替换——O(Nlog5)≈O(N)，且内存里只留 5 条。结构选对，性能差 3 个数量级。",
+      "code": "import heapq\nfrom collections import deque, Counter\n\n# ① 去重判断：list 的 O(n) -> set 的 O(1)\nseen = set()\nfor item in huge_list:\n    if item in seen:      # set: O(1)；若是 list 则 O(n)\n        continue\n    seen.add(item)\n\n# ② Top-k：小顶堆，内存只留 k 条\nscores = [('doc1', 0.9), ('doc2', 0.85), ('doc3', 0.95)]\ntop5 = heapq.nlargest(5, scores, key=lambda x: x[1])\n\n# ③ 滑动窗口/限长历史：双端队列 O(1) 两端操作\nwindow = deque(maxlen=10)     # 保留最近10条对话\nwindow.append('新消息')        # 超出自动从左侧丢弃\n\n# ④ 计数：Counter 一次遍历\ncounts = Counter(['a', 'b', 'a'])\nprint(counts.most_common(1))  # [('a', 2)]"
+    },
+    "related": ["algorithms", "hashmap", "vector-database", "redis-data-structures"],
+    "extended": "进阶方向：跳表（ZSet 底层）、LSM 树（LevelDB/RocksDB 写路径）、布隆过滤器、图结构（Agent 的依赖 DAG）"
+  },
+  {
+    "id": "algorithms",
+    "category": "软件工程基础",
+    "name": "核心算法思想与复杂度",
+    "summary": "二分/双指针/滑动窗口/BFS/DFS/DP——六种思想覆盖九成工程题，Big O 是通用语言。",
+    "description": "与其刷题背解，不如掌握六个思想模板：二分查找（有序/单调空间折半，O(logN)——只要『答案对参数单调』就能二分，不止查数组）；双指针（对撞指针处理有序配对，快慢指针找环去重）；滑动窗口（连续子数组/子串问题，右端扩张左端收缩，O(N)）；BFS（层序扩散=无权图最短步数，用队列）；DFS（一路到底+回溯，用递归/栈，枚举排列组合子集）；动态规划（重叠子问题+最优子结构，定义状态和转移方程）。复杂度分析（Big O）是开工前的可行性检查：10⁵ 规模数据跑 O(N²) 是 10¹⁰ 次运算≈几十秒——写代码前就能预判死活。",
+    "background": "『算法』一词源自 9 世纪数学家花拉子米（al-Khwārizmī）；欧几里得算法（公元前 300 年）是最早的成文算法。动态规划 1950 年代由 Bellman 提出（名字『dynamic』是当时申请经费的营销词）。工程中二分无处不在：git bisect 定位坏提交、容量规划、超参数搜索。AI 应用里同样全是算法：检索 top-k 是堆+排序、上下文裁剪是滑动窗口、文本 diff 是编辑距离 DP、Agent 任务调度是图的拓扑排序。",
+    "problem": "解决『面对问题不知道从哪下手』和『写完才发现跑不动』两个问题：思想模板把陌生问题映射到已认识的形状（『这是在找单调边界→二分』『这要求连续区间最优→滑动窗口』）；复杂度分析让你在键盘之前就知道 10 倍数据量后还能不能跑。",
+    "analogy": "算法思想像厨艺的刀法：食材（数据形态）不同刀法不同，但每种刀法练熟就能处理一大类食材。DP 是把大菜拆成小菜分别做好再组合上桌；二分是切萝卜条时每次对半——切 20 刀就能从百万里锁定目标。",
+    "points": [
+      "分析顺序：先写暴力解评估复杂度 → 找瓶颈（重复计算？无序？二维？）→ 对号入座（DP/记忆化、二分排序、双指针）",
+      "递归三问：终止条件是什么？子问题如何缩小？有没有重复计算（有→加记忆化变 DP）",
+      "空间换时间是万能交换：哈希表、预处理前缀和、缓存全是这个思想"
+    ],
+    "pitfalls": [
+      "二分边界写错：mid 计算溢出（用 left+(right-left)/2）、死循环（区间收缩条件不对）——二分的坑全在边界",
+      "DP 状态定义不清就开始填表：先说清 dp[i] 的含义，转移方程自然浮现",
+      "裸递归不算重复计算：斐波那契递归 O(2ⁿ)，加一行记忆化缓存就是 O(N)"
+    ],
+    "applications": [
+      "上下文窗口裁剪：滑动窗口保留最近 N token + 摘要压缩",
+      "语义检索 top-k：相似度全量扫描 + 小顶堆取前 k",
+      "Agent 任务依赖调度：拓扑排序（BFS 变体）决定执行顺序",
+      "长文本对比/去重：编辑距离 DP（diff 工具的内核）",
+      "评测抽样验证：二分定位第一个评测失败的版本"
+    ],
+    "example": {
+      "scenario": "产品要求『找出一篇长文里没有重复字符的最长片段』（切分 chunk 用）：暴力枚举所有片段是 O(N²)；滑动窗口右指针走、左指针收缩，一趟 O(N) 解决——同一需求，十倍数据量下是秒与天的差距。",
+      "code": "import bisect\n\n# ① 二分：bisect 是内置的二分插入\nsorted_scores = [0.32, 0.45, 0.78, 0.91]\npos = bisect.bisect_left(sorted_scores, 0.5)  # O(logN)\nprint(pos)  # 2 -> 第一个 >= 0.5 的位置\n\n# ② 滑动窗口：最长无重复字符子串 O(N)\ndef longest_unique(s):\n    seen, left, best = {}, 0, 0\n    for right, ch in enumerate(s):\n        if ch in seen and seen[ch] >= left:\n            left = seen[ch] + 1        # 左边界跳过重复\n        seen[ch] = right\n        best = max(best, right - left + 1)\n    return best\n\n# ③ 动态规划：编辑距离（diff 工具的内核）\ndef edit_distance(a, b):\n    dp = [[0] * (len(b) + 1) for _ in range(len(a) + 1)]\n    for i in range(len(a) + 1):\n        dp[i][0] = i\n    for j in range(len(b) + 1):\n        dp[0][j] = j\n    for i in range(1, len(a) + 1):\n        for j in range(1, len(b) + 1):\n            if a[i-1] == b[j-1]:\n                dp[i][j] = dp[i-1][j-1]           # 相同: 免费\n            else:\n                dp[i][j] = 1 + min(dp[i-1][j],     # 删\n                                   dp[i][j-1],     # 增\n                                   dp[i-1][j-1])   # 改\n    return dp[-1][-1]"
+    },
+    "related": ["data-structures", "context-window", "chunking", "hashmap"],
+    "extended": "进阶方向：LeetCode 按思想分类刷题法、Top-k 全家桶（堆/快速选择/计数排序）、图算法与 Agent DAG 编排、概率与近似算法（布隆/HyperLogLog）"
+  },
+  {
+    "id": "design-principles",
+    "category": "软件工程基础",
+    "name": "SOLID 设计原则",
+    "summary": "五条一句话：单一职责、开闭、里氏替换、接口隔离、依赖倒置——代码腐烂的解药。",
+    "description": "S 单一职责（SRP）：一个模块只应有一个变化的原因——判断标准不是『功能多少』而是『因什么而改』。O 开闭原则（OCP）：加功能靠新增代码而非修改老代码——策略模式把 if-else 换成可注册的策略，就是 OCP 的典型落地。L 里氏替换（LSP）：任何父类出现的地方子类必须能无感替换——子类别收紧前置条件、别放松后置条件。I 接口隔离（ISP）：别强迫客户端依赖它用不到的方法——大而全的接口拆成小接口。D 依赖倒置（DIP）：高层业务依赖抽象接口而非具体实现——LLM 网关定义 Provider 接口，GPT/DeepSeek 都只是可替换的实现，换模型不改业务代码。",
+    "background": "Robert C. Martin（Uncle Bob）在 2000 年前后把 OOP 设计经验归纳为 SOLID 五原则；开闭思想更早出自 Bertrand Meyer《Object-Oriented Software Construction》（1988）。必须配套的工程真相：原则是给『预期会变化的地方』准备的——对稳定不变的地方套原则就是过度设计，间接性本身是有成本的。",
+    "problem": "解决『需求一变就伤筋动骨』的代码腐烂问题：模型供应商一换全项目改调用点（违反 DIP）、每加一种告警渠道就在 send 函数里加 if（违反 OCP）、一个 3000 行的 Service 类谁都不敢动（违反 SRP）。原则不教你写代码，教你把『变化』关进预留在的小房间里。",
+    "analogy": "依赖倒置像墙上的插座：电器（高层业务）只认插座标准（抽象接口），换发电厂（换模型供应商/换数据库）不需要重新装修布线。单一职责像一个员工只负责一件事——让他管十件事，任何一件出变更都要找他，他请假全公司瘫痪。",
+    "points": [
+      "先有变化再有抽象：只对历史上真的变过/明确要变的维度做接口，否则是预测未来的赌博",
+      "依赖注入是 DIP 的最低配落地：构造器传参即可，不需要任何框架",
+      "SRP 的判断标准是『变化的原因』：ConfigManager 和 ConfigViewer 分开，不是因为功能不同而是因为改的人不同"
+    ],
+    "pitfalls": [
+      "为模式而模式：只有一个实现的接口、三层抽象包一层透传——间接性成本超过收益",
+      "把 SOLID 当背诵题：面试头头是道，代码里 3000 行 if-else",
+      "接口隔离做过头：一个方法一个接口，最后接口爆炸没人看得懂"
+    ],
+    "applications": [
+      "LLM 网关 Provider 抽象：OpenAI/DeepSeek/Azure 实现同一接口，路由层只认接口（DIP）",
+      "评测框架 Metric 接口：新指标注册即用，不改编排代码（OCP）",
+      "Agent 工具注册表：工具自描述注册，主循环不感知具体工具（OCP+DIP）",
+      "FastAPI Depends：数据库会话/鉴权/配置全部注入（DIP 的框架化）"
+    ],
+    "example": {
+      "scenario": "原来业务代码里 30 处直接 `OpenAI()` 调用，换 DeepSeek 时全项目改了两天还漏了三处。依赖倒置重构后：业务只认 `LLMProvider` 接口，具体供应商由启动配置注入——换模型改一行配置，业务代码零改动。",
+      "code": "from abc import ABC, abstractmethod\n\n# 抽象：高层业务只认识这个接口（DIP）\nclass LLMProvider(ABC):\n    @abstractmethod\n    def chat(self, messages: list, **kw) -> str: ...\n\nclass OpenAIProvider(LLMProvider):\n    def chat(self, messages, **kw):\n        return call_openai(messages, **kw)\n\nclass DeepSeekProvider(LLMProvider):\n    def chat(self, messages, **kw):\n        return call_deepseek(messages, **kw)\n\n# 高层业务：不 import 任何具体供应商\nclass QAService:\n    def __init__(self, provider: LLMProvider):   # 构造器注入\n        self.provider = provider\n    def ask(self, q: str) -> str:\n        return self.provider.chat([{'role': 'user', 'content': q}])\n\n# 装配时决定实现（改一行 = 换供应商）\nsvc = QAService(DeepSeekProvider())"
+    },
+    "related": ["design-patterns", "model-selection", "fault-tolerance", "fastapi"],
+    "extended": "进阶方向：《重构》Martin Fowler、组合优于继承、整洁架构/六边形架构、KISS 原则与过度设计的边界"
+  },
+  {
+    "id": "design-patterns",
+    "category": "软件工程基础",
+    "name": "高频设计模式实战",
+    "summary": "只需精通六个：策略、工厂、观察者、装饰器、代理、模板方法——AI 工程里天天在用。",
+    "description": "每个模式一句话说清：策略（一组可互换的算法，运行时选择——模型路由、采样参数切换）；工厂（封装创建逻辑，按配置决定 new 谁——按任务类型创建不同 Agent）；观察者（一对多事件通知——事件总线、回调注册、日志埋点）；装饰器（不改原函数叠加职责——Python 的 @retry/@log/@cache 语法直接内置了这个模式）；代理（控制对对象的访问——API 网关、缓存代理、惰性加载）；模板方法（父类定骨架、步骤留钩子——评测基类定义 run/metric 接口，子类填具体逻辑）。GoF 的 23 种里，这 6 个覆盖日常开发 90% 的场景。",
+    "background": "1994 年 GoF《设计模式》出版时面向 C++/Smalltalk，23 个模式里有一半是为弥补当时语言的表达力。三十年后社区共识是『组合优于继承』，且现代语言把不少模式吞进了语法：Python 装饰器=装饰器模式的一等公民语法、一等函数让策略模式退化成传函数、上下文管理器接管了模板方法的骨架。学模式的正确姿势：先在代码里遇到痛点，再认识『原来这叫策略模式』——而不是背下 23 种然后找地方套。",
+    "problem": "解决『同一类变化处理问题被反复用 if-else 糊墙』的问题：每加一种模型就在路由函数里加一个 elif，每加一种通知渠道就多一层嵌套。模式是 30 年踩坑沉淀的『变化处理预案库』：你现在的设计困境大概率有命名的解法，说出名字团队三秒对齐。",
+    "analogy": "模式是乐高说明书里的经典拼法：遇到桥形结构不必自己发明，照说明书拼就行；更重要的是团队交流时说『这里用桥形结构』（这里用策略模式），所有人立刻知道你搭的是什么、在哪里可以替换零件。",
+    "points": [
+      "识别信号：一堆按类型分支的 if-else → 策略；创建逻辑重复且带配置 → 工厂；一个动作要通知多方 → 观察者；函数越长越杂 → 装饰器拆分",
+      "模式的价值一半在实现，一半在共同语言——代码里类名叫 RetryPolicy 比注释解释三行更高效",
+      "Python 里多数模式更轻：传函数就是策略、@decorator 就是装饰器、生成器就是迭代器——别用 Java 的写法硬翻译"
+    ],
+    "pitfalls": [
+      "面试背 23 种不如吃透 6 种——剩下 17 种在 AI 工程里出现频率极低",
+      "小脚本硬套模式：模式引入间接性，两个函数能解决的事别上四层抽象",
+      "用继承实现装饰器/复用——组合和委托才是正解，继承链超过 2 层就要警惕"
+    ],
+    "applications": [
+      "LLM 网关 fallback 链：主模型失败切备用（策略+责任链）",
+      "Agent 工具注册：@tool 装饰器自描述注册（工厂+注册表）",
+      "评测指标插件化：Metric 基类模板方法 + 注册工厂",
+      "请求重试/日志/缓存：装饰器三件套（本站工具链在用）"
+    ],
+    "example": {
+      "scenario": "一个函数里塞满了模型路由 if-else、重试逻辑、日志埋点共 200 行。用三个模式拆完：策略模式收走路由（每家供应商一个类）、装饰器收走重试和日志（@retry @log 竖着叠）、观察者收走埋点（emit 事件谁爱听谁听）——主函数只剩 5 行业务。",
+      "code": "import functools, time\n\n# ① 策略模式：路由里的 if-else 变成可注册的策略\nROUTE = {}\ndef register(task):\n    def deco(fn):\n        ROUTE[task] = fn\n        return fn\n    return deco\n\n@register('classify')\ndef run_classify(text):\n    return cheap_llm(text)\n\n@register('reasoning')\ndef run_reasoning(text):\n    return deep_think_llm(text)\n\ndef dispatch(task, text):\n    return ROUTE[task](text)   # 新任务=注册新函数，不改 dispatch（OCP）\n\n# ② 装饰器：重试横切关注点，不污染业务\ndef retry(times=3):\n    def deco(fn):\n        @functools.wraps(fn)\n        def wrapper(*a, **kw):\n            for i in range(times):\n                try:\n                    return fn(*a, **kw)\n                except Exception:\n                    if i == times - 1:\n                        raise\n                    time.sleep(2 ** i)\n        return wrapper\n    return deco\n\n# ③ 观察者：埋点与业务解耦\nLISTENERS = []\ndef on_event(fn):\n    LISTENERS.append(fn)\n    return fn\n\ndef emit(event, payload):\n    for fn in LISTENERS:\n        fn(event, payload)\n\n@on_event\ndef log_usage(event, payload):\n    print(f'[日志] {event}: {payload}')"
+    },
+    "related": ["design-principles", "model-selection", "asyncio", "java-concurrency"],
+    "extended": "进阶方向：GoF 原书选读、《Head First Design Patterns》、Python 语言特性吸收的模式（生成器/上下文管理器）、责任链在网关 fallback 的应用"
+  },
+  {
+    "id": "kubernetes",
+    "category": "工程与后端",
+    "name": "Kubernetes 与容器编排",
+    "summary": "从单机 Docker 到集群管理：声明式 API + 调度 + 自愈，云原生的操作系统。",
+    "description": "Docker 解决了单机的环境一致性，但一群机器上的几十个容器谁来部署、谁挂了重启、流量来了往哪扩——这就是 Kubernetes（K8s）要管的。核心心智模型是声明式：你用 YAML 描述期望状态（要 3 个副本、用这个镜像、探针怎么探），控制器循环不断把实际状态逼近期望状态，而不是执行一串命令。核心对象四件套：Pod（最小调度单元，1~n 个容器的组合）、Deployment（管理 Pod 的副本数/滚动更新/回滚）、Service（给漂移不定的 Pod 一个稳定虚拟 IP + 负载均衡）、ConfigMap/Secret（配置与密钥与镜像解耦）。自愈靠探针：liveness 探活失败自动重启，readiness 未就绪自动摘出负载均衡。",
+    "background": "Google 2014 年开源，把内部 Borg 系统十年的容器管理经验用 Go 重写。2015-2018 年赢得容器编排战争（Mesos、Docker Swarm 退出），此后 CNCF 整个生态围绕它生长。LLM 推理服务上 K8s 的真实动机：GPU 节点池调度（哪张卡空闲给谁）、流量弹性伸缩、发布不中断——vLLM 服务的官方部署方案都是 K8s YAML。",
+    "problem": "解决『一群机器上的容器管理』问题：容器化让应用装进了集装箱，但 50 个集装箱分到 10 条船上，谁负责装船、坏了谁换、旺季谁加船——手工管理到 3 个服务就到极限。K8s 把这些全部变成声明式配置 + 控制器自动化，人类只声明『要什么』。",
+    "analogy": "Docker 是集装箱，K8s 是整个港口的调度系统：货物清单（YAML 声明）交上来，卸到哪条船（调度）、堆放顺序（编排）、箱子坏了自动换新（自愈）、旺季临时加派吊机（扩缩容）全自动——船东不关心吊机怎么动，只关心清单写清楚。",
+    "points": [
+      "声明式是灵魂：kubectl apply 后控制器永远在 diff『实际 vs 期望』——重启集群后状态自恢复",
+      "Service 抽象让 Pod 随时可死可换：下游永远只连稳定的 ClusterIP/DNS 名",
+      "资源必须设 requests/limits：不设 limits 的 Pod 可以吃光整个节点，殃及邻居"
+    ],
+    "pitfalls": [
+      "liveness 探针配太猛：模型服务冷启动 30 秒，探针 5 秒就查——起来就被杀的循环重启",
+      "把有状态数据写进容器本地盘：Pod 一漂移数据就丢，数据库/文件走 PV（持久卷）或外置服务",
+      "把 K8s 当解决一切的银弹：3 个服务的小项目上 K8s 是运维自虐，docker-compose 足够"
+    ],
+    "applications": [
+      "LLM 推理服务：vLLM 容器 + GPU 节点池 + HPA 按 QPS 自动扩缩容",
+      "Agent 服务滚动发布：Deployment 更新镜像，逐个替换不中断",
+      "多环境配置：同一镜像不同 ConfigMap 区分开发/测试/生产",
+      "定时任务：CronJob 跑日报 Agent（本站实战三的集群版）"
+    ],
+    "example": {
+      "scenario": "把 vLLM 推理服务从单机 Docker 迁到 K8s：流量高峰时 HPA 自动从 2 副本扩到 8 副本；发布新模型版本时 Deployment 滚动更新逐个替换，探针保证旧 Pod 处理完请求才下线；某 Pod 内存超限被杀，控制器 3 秒拉起新的——全程无人值守。",
+      "code": "# vllm-deploy.yaml：推理服务的最小可生产配置\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: vllm-svc\nspec:\n  replicas: 2                     # 期望状态：2 个副本\n  selector:\n    matchLabels: {app: vllm}\n  template:\n    metadata:\n      labels: {app: vllm}\n    spec:\n      containers:\n      - name: vllm\n        image: registry.example.com/vllm:1.2.0\n        ports: [{containerPort: 8000}]\n        resources:                 # 不设 limits 会吃光节点\n          requests: {cpu: '2', memory: 8Gi}\n          limits: {cpu: '4', memory: 16Gi}\n        readinessProbe:            # 未就绪不接流量\n          httpGet: {path: /health, port: 8000}\n          initialDelaySeconds: 30  # 模型加载慢，别配太猛\n        livenessProbe:\n          httpGet: {path: /health, port: 8000}\n          periodSeconds: 10\n---\napiVersion: v1\nkind: Service\nmetadata:\n  name: vllm-svc\nspec:\n  selector: {app: vllm}\n  ports: [{port: 80, targetPort: 8000}]\n# kubectl apply -f vllm-deploy.yaml  -> 声明即终态"
+    },
+    "related": ["docker", "fastapi", "fault-tolerance", "logging-monitoring"],
+    "extended": "进阶方向：kubectl 常用命令速查、Helm 模板化部署、HPA/KEDA 弹性伸缩、GitOps（ArgoCD）"
+  },
+  {
+    "id": "ci-cd",
+    "category": "工程与后端",
+    "name": "CI/CD 流水线",
+    "summary": "从 git push 到线上更新全自动：校验→测试→构建→发布，人只写代码和点批准。",
+    "description": "CI（持续集成）：每次 push 自动跑校验和测试，坏代码进不了主分支。CD（持续交付/部署）：通过后自动构建产物并发布到环境。流水线的阶段设计原则是 fail fast：最便宜的检查放最前面（数据校验几秒、单元测试几分钟、集成测试十几分钟、部署最贵），前一关失败后面全部跳过。部署可以插人工审批（gated deployment）。回滚是第一公民：任何自动部署都必须配套 5 分钟内的回滚预案（镜像 tag 回退 / 重新部署旧版本），没有回滚演练的流水线等于裸奔。LLM 应用的特色一环：把评测集跑分作为部署门槛——分数降了自动拦截上线。",
+    "background": "CI 实践源自 1990 年代极限编程（XP）：『集成要频繁到痛苦最小化』。Jenkins 前身 Hudson 2004 年发布，手工配置 XML 时代持续十年；2019 年 GitHub Actions 把 CI 平民化——配置即代码（YAML 存仓库）、生态市场、按分钟计费。再往后 GitOps（ArgoCD）把『部署』也变成改 git 里的声明：git 仓库成为唯一真源，K8s 集群自动对齐。本项目的 .github/workflows/validate.yml 就是一条 10 行的最小 CI：push 触发 → 跑 validate.py → 坏数据挡在主分支外。",
+    "problem": "解决手工发布的三宗罪：步骤靠人记（漏跑一次校验就是线上事故）、环境不一致（『我本地是好的』）、回滚靠翻聊天记录找步骤。流水线把发布变成机器执行的可重复脚本：人写代码，机器负责纪律——交付周期从『天』到『分钟』，事故率随之下降。",
+    "analogy": "中央厨房出餐：菜谱一更新（git push）自动触发质检（CI 校验）→ 标准化烹饪（构建）→ 按单配送（部署）。质检不过整批扣下，出了问题整批召回（回滚）——而不是每个厨师凭手感现做、出事了靠回忆步骤。",
+    "points": [
+      "fail fast 排序：数据校验（秒）→ 单测（分）→ 集成测试 → 构建 → 部署，贵的放后面",
+      "密钥只走 CI secrets（环境变量注入），代码和日志里永远不出现",
+      "部署完成的标志是 smoke check 通过（探活+关键接口），不是命令跑完"
+    ],
+    "pitfalls": [
+      "流水线红了习惯性点重跑：绿了也不可信——红色必须查明原因，否则 CI 沦为仪式",
+      "测试全 mock：单测 100% 通过但真实依赖全变了——集成测试要至少一条真链路",
+      "只有首次部署没有回滚：第一次真正回滚永远发生在事故当晚，且手忙脚乱"
+    ],
+    "applications": [
+      "本站：push → validate.py（数据校验）→ GitHub Pages 自动部署，坏 JSON 挡在门外",
+      "LLM 应用：部署前跑评测集，准确率跌破阈值自动拦截（评测即门槛）",
+      "微服务：构建 Docker 镜像推 registry → K8s 滚动更新 → smoke check",
+      "知识库：文档更新触发重建索引流水线"
+    ],
+    "example": {
+      "scenario": "本项目的真实流水线：你 push 一个改坏 concepts.json 的提交——validate.yml 在 10 秒内跑完 validate.py，报出『图片不存在』的错误并标记失败，Pages 不部署（线上还是旧版）；你修复后重新 push，绿色通过自动上线。坏数据从『上线后才发现』变成『push 后 10 秒被拦』。",
+      "code": "# 本项目的 CI（.github/workflows/validate.yml）\nname: validate\non:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with: {python-version: '3.12'}\n      - name: 校验数据完整性\n        run: python tools/validate.py   # 字段/引用/图片全查\n\n# LLM 应用的进阶流水线（示意）：评测即门槛\n#   - run: python eval/run.py --min-accuracy 0.85\n#   - run: docker build -t app:${{ github.sha }} .\n#   - run: docker push app:${{ github.sha }}\n#   - run: kubectl set image deploy/app app=app:${{ github.sha }}\n#   - run: python scripts/smoke_check.py   # 探活才算完成"
+    },
+    "related": ["docker", "kubernetes", "evaluation-metrics", "logging-monitoring"],
+    "extended": "进阶方向：GitHub Actions 进阶语法（matrix/缓存/并发控制）、GitOps 与 ArgoCD、金丝雀发布、评测门槛（eval-gated deployment）"
+  }
+]

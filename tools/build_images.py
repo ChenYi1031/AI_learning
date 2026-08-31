@@ -181,12 +181,12 @@ def gen_one(c, key):
 
 
 def resize(path):
+    """path 命名为 .webp，内容是 API 返回的 PNG——原地转码为 WebP。"""
     from PIL import Image
 
-    with Image.open(path) as im:
+    with Image.open(path) as im:  # PIL 按内容自动识别 PNG
         im = im.convert("RGB").resize((OUT_SIZE, OUT_SIZE), Image.LANCZOS)
-        im.save(path.with_suffix(".webp"), "WEBP", quality=82, method=6)
-    path.unlink()  # 删除原始 PNG，只保留 WebP
+        im.save(path, "WEBP", quality=82, method=6)
 
 
 def save(concepts):

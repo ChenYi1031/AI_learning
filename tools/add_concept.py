@@ -47,11 +47,14 @@ def main():
                    json.loads(TUTORIALS.read_text(encoding="utf-8"))["tutorials"]}
 
     # ---- 校验 ----
-    errors, batch_ids = [], set()
+    errors = []
+    batch_ids = [c.get("id") for c in items]   # 同批引用先于校验收集
+    seen_in_batch = set()
     for c in items:
         cid = c.get("id", "?")
-        if cid in existing or cid in batch_ids:
+        if cid in existing or cid in seen_in_batch:
             errors.append(f"[{cid}] id 已存在")
+        seen_in_batch.add(cid)
         missing = [k for k in REQUIRED if not c.get(k)]
         if missing:
             errors.append(f"[{cid}] 缺字段: {missing}")
@@ -65,7 +68,6 @@ def main():
                if r not in existing and r not in tut_ids and r not in batch_ids]
         if bad:
             errors.append(f"[{cid}] related 引用不存在: {bad}")
-        batch_ids.add(cid)
     if errors:
         sys.exit("校验失败:\n" + "\n".join(errors))
 

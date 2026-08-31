@@ -1208,6 +1208,234 @@
           ]
         }
       ]
+    },
+    {
+      "id": "proj-seckill",
+      "type": "project",
+      "title": "实战五：高并发秒杀系统",
+      "subtitle": "Redis 原子扣减 + 消息队列异步化 + MySQL 落库的极限流量考验",
+      "meta": "难度 ★★★★★ · 串讲 14 个概念 · 后端并发设计的集大成考题",
+      "readTime": "约 25 分钟",
+      "intro": "10 万人同一秒抢 1000 件商品，库存只有一个数字——直接写 MySQL 就是灾难片。秒杀是后端并发设计的『高考题』：它把限流、缓存、分布式锁、消息队列、幂等落库、对账补偿全部逼到极限。做完这个项目，数据库与中间件分类的知识点会全部串成一条真实的流量链路。",
+      "sections": [
+        {
+          "id": "bottleneck",
+          "title": "1. 瓶颈分析：流量在哪里被砍掉",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "先算账：10 万 QPS 洪峰，商品只有 1000 件。关键洞察是——**99% 的请求注定失败，设计目标不是让它们成功，而是让它们廉价地失败**。每一层都要把流量砍掉一截，能到达数据库的请求必须是两位数："
+            },
+            {
+              "type": "diagram",
+              "content": "  用户 100,000 QPS\n     │\n     ▼\n  ① 网关限流 ──────── 每用户 1次/秒 + 全局 2万 QPS 上限\n     │               (Redis INCR 计数，超限直接 429)\n     ▼\n  ② 风控/答题 ─────── 挤掉脚本，拉平请求（答题页随机延时）\n     │\n     ▼ 剩 ~20,000 QPS\n  ③ 读缓存 ────────── 商品详情/库存快照全部走 Redis\n     │               (库不出场，读流量与库无关)\n     ▼ 下单请求 ~5,000 QPS\n  ④ Redis Lua 预扣 ── 原子检查+扣减，库存=0 立即拒绝\n     │               (只有前 ~1,000 个成功)\n     ▼ ~1,000 条消息\n  ⑤ MQ 异步下单 ───── 秒杀成功即返回『排队中』\n     │\n     ▼ 稳定 ~50 QPS\n  ⑥ 消费者落库 ────── 幂等创建订单 + 扣减 MySQL 库存\n     │               (数据库看到的流量从 10万 -> 两位数)\n     ▼\n  ⑦ 支付时限 ──────── 15分钟未支付 → 延迟消息回补库存\n     │\n  ⑧ 对账任务 ──────── Redis 与 MySQL 库存核对，差额补偿"
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "架构的灵魂：把数据库藏起来",
+              "content": "整条链路里，MySQL 只在第 ⑥ 步以两位数 QPS 出现。它不再是主角而是『最终记账员』——所有压力由 Redis（内存原子操作）和 MQ（缓冲）扛下。这就是为什么秒杀系统崩的从来不是 MySQL，而是没设计好链路的全站。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "cache-strategies",
+                "message-queue",
+                "mysql-index"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "seckill-flow",
+          "title": "2. 核心链路：Redis 原子预扣 + 幂等落库",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "全链路最容易死人的两步：④ Redis 扣库存（必须原子，不能『先读后写』）和 ⑥ 消费落库（必须幂等，消息可能重复）。"
+            },
+            {
+              "type": "steps",
+              "items": [
+                "④ 预扣库存用 Lua 脚本：『读库存→判断→扣减』三步在 Redis 服务端一次性执行，中间不可能插入其他请求——超卖在物理上不可能发生。扣减成功才发 MQ 消息，一次失败立即返回『已抢完』。",
+                "⑤ 为什么不直接落库：1000 个成功请求若同步写 MySQL，加上事务和索引维护，峰值也难以招架；发 MQ 后接口立刻返回『排队中，请稍后查单』，用户体验反而更好（不用盯着转圈）。",
+                "⑥ 消费落库双保险：订单表 sku_id+user_id 唯一约束挡重复消息（幂等），事务内『创建订单+扣库存』保证原子。消费失败重试 3 次进死信队列+告警。",
+                "⑦ 回补库存：15 分钟未支付，延迟消息（RocketMQ 延迟级别/ZSet 轮询）触发取消订单+回补 Redis 与 MySQL 库存——回补同样要幂等（状态机：只允许 已下单→已取消）。",
+                "⑧ 对账兜底：任何精巧设计都有 bug 的可能。每 5 分钟定时对账：sum(MySQL 已支付库存) + Redis 未支付预扣 = 总库存，差额告警并人工介入。对账是所有精巧架构的最后一道保险。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "分布式锁在这里是陷阱不是答案",
+              "content": "新手第一反应是『用分布式锁把扣库存锁起来』——错！锁串行化了请求，1 万 QPS 排队过锁等于自废武功。正确姿势是 Lua 脚本的无锁原子扣减（Redis 单线程天然串行执行脚本）。分布式锁只用在『重建缓存』『定时任务防重』这类低频场景。"
+            },
+            {
+              "type": "code",
+              "lang": "python",
+              "content": "# ④ 原子预扣：Lua 脚本在 Redis 端一次执行完毕\nSECKILL_LUA = '''\nlocal stock = tonumber(redis.call('GET', KEYS[1]))\nif stock == nil then return -2 end          -- 活动不存在\nif stock <= 0 then return -1 end            -- 已抢完\nlocal bought = redis.call('SISMEMBER', KEYS[2], ARGV[1])\nif bought == 1 then return -3 end           -- 重复抢（一人一单）\nredis.call('DECR', KEYS[1])                 -- 扣库存\nredis.call('SADD', KEYS[2], ARGV[1])        -- 记录已购用户\nreturn 1                                    -- 预扣成功\n'''\n\n@app.post('/seckill/{sku_id}')\nasync def seckill(sku_id: int, user: User = Depends(auth)):\n    if not limiter.allow(user.id):          # ① 用户级限流\n        raise HTTPException(429, '手速太快')\n    result = r.eval(SECKILL_LUA, 2,\n                    f'stock:{sku_id}', f'bought:{sku_id}',\n                    user.id)\n    if result != 1:\n        return {'code': result}             # -1 抢完 / -3 重复\n    producer.send('seckill-order',         # ⑤ 异步下单\n                  {'sku': sku_id, 'user': user.id,\n                   'order_id': gen_order_id()})\n    return {'code': 0, 'msg': '排队中，稍后查单'}\n\n# ⑥ 消费者：幂等落库\ndef consume_order(msg):\n    order_id = msg['order_id']\n    try:\n        with db.transaction():\n            db.insert('orders', order_id=order_id,      # 唯一约束幂等\n                      sku_id=msg['sku'], user_id=msg['user'],\n                      status='PAID_PENDING')\n            db.execute('UPDATE stock SET num = num - 1 '\n                       'WHERE sku_id = %s AND num > 0', msg['sku'])\n        ack(msg)\n    except DuplicateKey:\n        ack(msg)                       # 重复消息，幂等跳过\n    except Exception:\n        to_retry_or_dlq(msg)           # 指数退避 -> 死信+告警"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "distributed-lock",
+                "redis-data-structures",
+                "mq-delivery",
+                "transaction-isolation"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "seckill-retro",
+          "title": "3. 事故复盘：三个经典翻车现场",
+          "blocks": [
+            {
+              "type": "list",
+              "items": [
+                "事故一『超卖 37 件』：v1 版本用『GET 库存 → 判断 → DECR』三步命令，并发下两个请求都读到 1、都扣成 0——卖超 37 件，客服集体加班。修复：Lua 原子化。教训：检查和扣减必须是同一个原子操作。",
+                "事故二『少卖 200 件』：Redis 预扣成功但消费者全挂了，库存停在 Redis 上没人用。修复：对账任务发现 Redis 已扣但 MySQL 无订单的差额，自动重新入队补偿。教训：引入多组件就要引入对账。",
+                "事故三『黄牛脚本 8 万 QPS』：限流只按 IP，黄牛用代理池绕过。修复：多层限流（IP+用户+设备指纹）+ 答题/排队页拉平请求。教训：限流的对抗性——你永远在和想绕过限流的人博弈。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "info",
+              "title": "秒杀设计的普适结论",
+              "content": "这套『缓存挡读、原子扣减、异步落库、对账兜底』的四段式不只用于秒杀——LLM 应用的 token 配额扣减、API 配额发放、评测名额分配，全是同构问题。学会秒杀 = 掌握一套应对『稀缺资源高并发争抢』的通用模式。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "redis-data-structures",
+                "distributed-lock",
+                "cache-strategies",
+                "message-queue",
+                "mq-delivery",
+                "mysql-index",
+                "transaction-isolation",
+                "fault-tolerance",
+                "http-retry",
+                "logging-monitoring",
+                "data-structures",
+                "algorithms",
+                "transaction-isolation",
+                "postgresql"
+              ],
+              "lead": "点击复习本项目全部知识点："
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "proj-cicd-pipeline",
+      "type": "project",
+      "title": "实战六：从 0 到 1 的 CI/CD 流水线",
+      "subtitle": "以本站为例：push 10 秒校验拦截 + 自动部署 + 评测门槛",
+      "meta": "难度 ★★★☆☆ · 串讲 8 个概念 · 一个真实运行中的流水线解剖",
+      "readTime": "约 15 分钟",
+      "intro": "这不是教程式的假想项目——你现在看的这个网站本身就跑着一条 CI/CD 流水线：每次 push 自动校验数据完整性（10 秒），坏数据拦截在主分支外，通过后 GitHub Pages 自动部署。本篇解剖它的每一步，再展示 LLM 应用如何把『评测集跑分』变成部署门槛。读完你会拥有搭建自己第一条流水线的全部知识。",
+      "sections": [
+        {
+          "id": "cicd-why",
+          "title": "1. 演进史：从手工部署到 10 秒拦截",
+          "blocks": [
+            {
+              "type": "steps",
+              "items": [
+                "阶段一·手工时代：改完代码手动刷新浏览器看有没有坏——一次手滑改坏 concepts.json 的引号，全站白屏两小时才发现。发布=赌博。",
+                "阶段二·自动部署：GitHub Pages 绑定 main 分支，push 即上线。发布不用动手了，但坏数据照样直接上线——速度提升，质量没保障。",
+                "阶段三·CI 拦截（当前状态）：.github/workflows/validate.yml 让每次 push 先跑 tools/validate.py（字段完整性/id 唯一/related 引用/图片存在性全查），红了我立刻收到邮件，线上保持旧版。坏数据从『上线后两小时发现』变成『push 后 10 秒拦截』。",
+                "阶段四·评测门槛（LLM 应用进阶）：换成 AI 应用后，『测试通过』不够——还要『评测集跑分不降』才准上线：准确率从 88% 掉到 82% 的模型版本会被流水线自动拦下。"
+              ]
+            },
+            {
+              "type": "diagram",
+              "content": "  git push\n    │\n    ▼\n  ┌─ CI 阶段（fail fast，便宜的在前）─────────┐\n  │ ① 数据校验  validate.py      ~10s  ──┐   │\n  │ ② 单元测试   pytest            ~2min ──┤   │\n  │ ③ 集成测试   真依赖冒烟        ~5min ──┤任一│\n  │ ④ 评测跑分   eval.py --min .85 ~10min ──┘失败│\n  └──────────────────────┬─────────── 即停  │\n                         │ 全绿             │\n                         ▼                  ▼\n                 ┌─ CD 阶段 ─┐        🔴 拦截+通知\n                 │ 构建产物    │      （线上保持旧版）\n                 │ 人工审批(可选)│\n                 │ 部署+探活   │\n                 └─────┬─────┘\n                       ▼\n              🟢 线上更新（回滚预案就绪）"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "ci-cd",
+                "evaluation-metrics",
+                "logging-monitoring"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "cicd-anatomy",
+          "title": "2. 流水线解剖：10 行 YAML 每一行在干什么",
+          "blocks": [
+            {
+              "type": "code",
+              "lang": "yaml",
+              "content": "name: validate                      # 流水线名字\non:                                 # 什么时候触发\n  push:\n    branches: [main]                # push 到 main 时\n  pull_request:                     # 以及所有 PR\njobs:\n  check:\n    runs-on: ubuntu-latest          # 在 GitHub 提供的 Linux 容器跑\n    steps:\n      - uses: actions/checkout@v4   # ① 拉取代码到工作目录\n      - uses: actions/setup-python@v5\n        with:\n          python-version: '3.12'    # ② 装指定版本 Python\n      - name: 校验数据完整性\n        run: python tools/validate.py  # ③ 跑校验，非0退出=失败"
+            },
+            {
+              "type": "list",
+              "items": [
+                "为什么是 validate.py 先行：它是最便宜的检查（10 秒、无依赖），fail fast 原则让最贵的环节（部署）只在一切就绪后执行。",
+                "validate.py 查什么：87 个概念的 15 字段完整性、id 唯一性、related 引用（概念+教程双向）、每张图片真实存在且为 WebP、教程引用的概念存在。任何一条挂了 exit(1)，流水线标红。",
+                "为什么红了我敢放心：流水线红 = 线上保持旧版（Pages 只部署成功 push）——坏数据被物理拦截在主分支外，这就是 CI 的价值：不是不出错，是错误进不了生产。"
+              ]
+            },
+            {
+              "type": "callout",
+              "tone": "tip",
+              "title": "给 LLM 应用加上评测门槛",
+              "content": "传统应用 CI 跑单测，LLM 应用还要跑评测集：换了个 prompt/模型/参数，跑一遍 100 条评测数据，忠实度/准确率低于基线就自动拦截。这是 LLM 应用工程区别于传统后端的最重要一条流水线实践——『感觉变好了』在流水线面前不算数。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "ci-cd",
+                "python-basics",
+                "rag-evaluation"
+              ],
+              "lead": "本节关联概念："
+            }
+          ]
+        },
+        {
+          "id": "cicd-advanced",
+          "title": "3. 进阶：从静态站到容器化应用的全链路",
+          "blocks": [
+            {
+              "type": "text",
+              "content": "静态站的部署简单（文件就在那）。LLM 应用要多三步：构建 Docker 镜像（环境打包）→ 推送镜像仓库（制品管理）→ K8s 滚动更新（不中断替换），部署后还要 smoke check 探活才算完成。三步全部可以写进同一条流水线："
+            },
+            {
+              "type": "code",
+              "lang": "yaml",
+              "content": "  deploy:\n    needs: check              # 上面的校验全绿才执行\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - name: 构建 Docker 镜像\n        run: |\n          docker build -t registry.example.com/rag-app:${{ github.sha }} .\n      - name: 推送镜像（密钥走 CI secrets）\n        run: |\n          echo ${{ secrets.REGISTRY_TOKEN }} | docker login -u ci --password-stdin\n          docker push registry.example.com/rag-app:${{ github.sha }}\n      - name: K8s 滚动更新\n        run: kubectl set image deploy/rag-app app=registry.example.com/rag-app:${{ github.sha }}\n      - name: Smoke check（部署完成 = 探活通过）\n        run: python scripts/smoke_check.py --url https://api.example.com/health\n      # 回滚预案：kubectl rollout undo deploy/rag-app（5分钟内可执行）"
+            },
+            {
+              "type": "callout",
+              "tone": "warn",
+              "title": "三个真实教训",
+              "content": "教训一：流水线红了习惯性点重跑——绿了也不可信，红色必须查明原因，否则 CI 沦为仪式。教训二：密钥写进 workflow 文件被扫库机器人抓走——密钥只走 secrets 注入。教训三：没有回滚演练——第一次真正回滚永远发生在事故当晚且手忙脚乱，每季度要演练一次。"
+            },
+            {
+              "type": "concepts",
+              "ids": [
+                "ci-cd",
+                "docker",
+                "kubernetes",
+                "fault-tolerance",
+                "logging-monitoring",
+                "evaluation-metrics",
+                "http-retry"
+              ],
+              "lead": "点击复习本项目全部知识点："
+            }
+          ]
+        }
+      ]
     }
   ]
 }
