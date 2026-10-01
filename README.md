@@ -3,8 +3,8 @@
 一个纯静态、零依赖的知识学习网站：99 个 AI/Agent 相关概念卡 + 论文精读 + 实战项目教程，内置间隔重复自测复习与跨设备云同步（Turso）。
 
 **在线地址**：
-- 主站（EdgeOne Pages，国内访问更快）：部署后由 EdgeOne 分配 `*.edgeone.app` 域名
-- 兜底镜像（GitHub Pages）：https://chenyi1031.github.io/AI_learning/
+- 主站（GitHub Pages）：https://chenyi1031.github.io/AI_learning/
+- EdgeOne Pages：已部署（`learning-3txpkgp2.edgeone.cool`），但**默认域名受平台访问限制**（签名预览链接仅 3 小时有效/大陆网络 401，见[官方错误码说明](https://pages.edgeone.ai/zh/document/error-codes)），正式启用需绑定自定义域名
 
 ## 功能
 
@@ -15,6 +15,8 @@
 - **云同步**：学习进度经 EdgeOne Node Function 存入 Turso，跨设备跟随；离线时暂存 localStorage 自动补传
 - **学习统计**：复习热力图（近 12 周）、分类掌握度、连续打卡天数
 - **数据导出/导入**：一键备份 JSON，导入按 LWW 合并
+
+> ⚠️ **云同步的可用范围**：Node Function 只随 EdgeOne Pages 部署。GitHub Pages 主站上同步徽章会显示"离线模式"（进度仅存本机浏览器，功能不受影响）；本地用 `node tools/dev_server.mjs` 可体验完整同步链路（内存数据）。要让线上主站也有云同步，需给 EdgeOne 绑定自定义域名后将主站切换过去，或把主站整体迁移到 EdgeOne。
 
 ## 架构
 
@@ -46,30 +48,29 @@ node tools/dev_server.mjs        # http://localhost:8000
 
 ## 部署
 
-### EdgeOne Pages（主站，国内访问更快）
+### GitHub Pages（当前主站）
 
-1. 腾讯云 EdgeOne Pages 控制台 → 创建项目 → 连接本 GitHub 仓库
-2. 构建配置：框架选"无/静态"，输出目录填仓库根 `.`
-3. 环境变量（项目设置）：
-   - `TURSO_DB_URL`：Turso 数据库地址
-   - `TURSO_AUTH_TOKEN`：Turso 数据库 Token
-   - `APP_KEY`：与 `sync.js` 中内置值一致的个人密钥（见 `.env.example`）
-4. 建议为 `/api/progress` 配置边缘限流（如 30 次/分/IP）
-5. push 到 main 后自动部署
+绑定 main 分支根目录自动部署。注意：Pages 不承载 Node Function，`/api/progress` 不存在，同步徽章显示离线模式，学习功能不受影响（进度暂存本地，可用导出/导入迁移）。
 
-访问延迟：未备案的 `*.edgeone.app` 域名走全球边缘节点，国内约 100–250ms；绑定已备案自定义域名可调度大陆节点，体验更优。
+### EdgeOne Pages（已部署，待绑定自定义域名后启用）
 
-### GitHub Pages（兜底镜像）
+已完成：GitHub 集成自动部署（main 推送触发）、环境变量（TURSO_DB_URL / TURSO_AUTH_TOKEN / APP_KEY）已配置、Turso 数据库已建表并通过生产函数真库 E2E。
 
-绑定 main 分支根目录自动部署，作为主站故障时的备份入口。注意：Pages 域名下 `/api/progress` 不存在，同步徽章显示离线模式，学习功能不受影响（进度暂存本地，回主站后自动补传）。
+**启用步骤**（默认域名 `*.edgeone.cool` 受平台访问限制，见官方[错误码说明](https://pages.edgeone.ai/zh/document/error-codes)）：
 
-### Turso 数据库（免费）
+1. 准备自定义域名：
+   - 已备案域名 → 加速区域可选"含中国大陆"，国内体验最佳
+   - 未备案域名 → 加速区域选"全球可用区（不含中国大陆）"，国内走港/日/新节点
+2. 控制台「域名管理」→ 添加自定义域名 → 按提示配置 CNAME 解析
+3. 验证 `/api/progress` 函数可用后，将主站切换至该域名，并把新地址更新到本 README
 
-1. 注册 [turso.tech](https://turso.tech) → 创建数据库（区域选美东或新加坡）
-2. 在 SQL Console 执行 `tools/schema.sql`
-3. 获取 Database URL 与 Token 填入 EdgeOne 环境变量
+访问延迟参考：未备案域名走海外边缘节点，国内约 100–250ms；已备案域名可调度大陆节点。
 
-配额以 [官方定价页](https://turso.tech/pricing) 为准；个人学习记录（百行级数据、每天几十次写入）远低于免费额度，实际零成本。
+### Turso 数据库（免费，已就绪）
+
+1. 数据库：`learning-chenyi1031`（东京区），表结构见 `tools/schema.sql`，已执行
+2. 凭证配置在 EdgeOne 环境变量与本地 `.env`（已 gitignore，勿提交）
+3. 配额以 [官方定价页](https://turso.tech/pricing) 为准；个人学习记录（百行级数据、每天几十次写入）远低于免费额度，实际零成本
 
 ## 添加新知识点
 
