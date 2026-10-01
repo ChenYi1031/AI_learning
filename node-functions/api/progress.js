@@ -32,9 +32,36 @@ function originAllowed(request) {
 }
 
 // ---- libSQL HTTP v2 (Hrana over HTTP) ----
+// Hrana 协议的 Value 是内嵌标签枚举，不接受裸 JSON 值：
+// 文本 {"type":"text","value":"..."}、整数 {"type":"integer","value":"123"}（字符串化防精度丢失）
+function toHranaArg(v) {
+  if (v === null || v === undefined) return { type: "null" };
+  if (typeof v === "number") {
+    return Number.isInteger(v)
+      ? { type: "integer", value: String(v) }
+      : { type: "float", value: v };
+  }
+  if (typeof v === "boolean") return { type: "integer", value: v ? "1" : "0" };
+  return { type: "text", value: String(v) };
+}
+
+// 结果行单元格同为枚举编码 → 解包为原始值（integer 的 value 是字符串，转回数字交给调用方）
+function unwrapCell(c) {
+  if (c && typeof c === "object" && "value" in c) {
+    return c.type === "integer" ? Number(c.value) : c.value;
+  }
+  return c;
+}
+
+function tursoBase(env) {
+  // 兼容 libsql:// 与 https:// 两种配置格式
+  return String(env.TURSO_DB_URL)
+    .replace(/^libsql:\/\//, "https://")
+    .replace(/\/+$/, "");
+}
+
 async function tursoQuery(env, stmts) {
-  const base = String(env.TURSO_DB_URL).replace(/\/+$/, "");
-  const res = await fetch(`${base}/v2/pipeline`, {
+  const res = await fetch(`${tursoBase(env)}/v2/pipeline`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.TURSO_AUTH_TOKEN}`,
@@ -42,7 +69,10 @@ async function tursoQuery(env, stmts) {
     },
     body: JSON.stringify({
       requests: stmts
-        .map((stmt) => ({ type: "execute", stmt }))
+        .map((stmt) => ({
+          type: "execute",
+          stmt: { ...stmt, args: (stmt.args || []).map(toHranaArg) },
+        }))
         .concat([{ type: "close" }]),
     }),
   });
@@ -97,19 +127,25 @@ async function handleGet(env) {
   return json({
     ok: true,
     server_time: Date.now(),
-    rows: progress.rows.map((r) => ({
-      concept_id: r[0],
-      box: Number(r[1]),
-      due: Number(r[2]),
-      updated_at: Number(r[3]),
-    })),
-    events: events.rows.map((r) => ({
-      concept_id: r[0],
-      grade: r[1],
-      box: Number(r[2]),
-      ts: Number(r[3]),
-      client_event_id: r[4],
-    })),
+    rows: progress.rows.map((r) => {
+      const [cid, box, due, updatedAt] = r.map(unwrapCell);
+      return {
+        concept_id: cid,
+        box: Number(box),
+        due: Number(due),
+        updated_at: Number(updatedAt),
+      };
+    }),
+    events: events.rows.map((r) => {
+      const [cid, grade, box, ts, ceid] = r.map(unwrapCell);
+      return {
+        concept_id: cid,
+        grade: grade,
+        box: Number(box),
+        ts: Number(ts),
+        client_event_id: ceid,
+      };
+    }),
   });
 }
 
