@@ -21,6 +21,12 @@
   var INTERVALS_D = [0, 1, 3, 7, 14, 30]; // box 1~5 对应的复习间隔（天）
   var DAY_MS = 86400000;
   var prog = loadProg();
+  var Sync = window.ProgressSync || {
+    now: function () { return Date.now(); },
+    markDirty: function () {},
+    logEvent: function () {},
+    onStatus: function () {},
+  };
 
   function loadProg() {
     try {
@@ -53,10 +59,14 @@
       prog[id] = prog[id] || { box: 0, due: 0 };
       prog[id].box = Math.max(prog[id].box, 1);
       prog[id].due = Date.now() + INTERVALS_D[prog[id].box] * DAY_MS;
+      prog[id].updated_at = Sync.now();
     } else {
       delete prog[id];
     }
     saveProg();
+    Sync.markDirty(id);
+    Sync.logEvent(id, learned ? "mark" : "unmark",
+      (prog[id] && prog[id].box) || 0);
     updateLearnedBadge();
     refreshCardLearnState(id);
   }
@@ -514,8 +524,11 @@
       review.queue.push(c); // 本轮结尾再来一次
       review.no++;
     }
+    p.updated_at = Sync.now();
     prog[c.id] = p;
     saveProg();
+    Sync.markDirty(c.id);
+    Sync.logEvent(c.id, good ? "yes" : "no", p.box);
     updateLearnedBadge();
     refreshCardLearnState(c.id);
     review.idx++;
@@ -640,6 +653,41 @@
       gradeCard(false);
     } else if (review.flipped && e.key === "2") {
       gradeCard(true);
+    }
+  });
+
+  /* ---------- 同步徽章与初始合并刷新 ---------- */
+  var syncBadge = document.getElementById("syncBadge");
+  var syncedOnce = false;
+
+  function renderSyncBadge(info) {
+    if (!syncBadge) return;
+    syncBadge.hidden = false;
+    var cls = "count-badge sync-badge";
+    var text = "☁️ 已同步";
+    if (info.state === "offline") {
+      cls += " st-offline";
+      text = "📴 离线模式" + (info.pending ? "（" + info.pending + "条待传）" : "");
+    } else if (info.state === "pulling" || info.state === "syncing" || info.state === "init") {
+      cls += " st-busy";
+      text = "⏳ 同步中…";
+    } else if (info.pending > 0) {
+      cls += " st-pending";
+      text = "☁️ 待同步 " + info.pending;
+    }
+    syncBadge.className = cls;
+    syncBadge.textContent = text;
+  }
+
+  Sync.onStatus(function (info) {
+    renderSyncBadge(info);
+    if ((info.state === "ready" || info.state === "offline") && !syncedOnce) {
+      syncedOnce = true;
+      // 初始拉取可能把远端进度合并进了 localStorage → 重新加载内存数据并刷新 UI
+      prog = loadProg();
+      updateLearnedBadge();
+      render(); // 卡片已学标记可能变化
+      if (currentView === "review" && !reviewView.hidden) renderReview();
     }
   });
 
