@@ -69,9 +69,28 @@ for c in cs:
 
 # ---------- index.html 引用的资源 ----------
 html = (ROOT / "index.html").read_text(encoding="utf-8")
-for f in ["script.js", "style.css"]:
+for f in ["script.js", "style.css", "sync.js"]:
     if f not in html or not (ROOT / f).exists():
         errors.append(f"index.html 引用的 {f} 缺失")
+
+# ---------- JS 语法校验（node --check，CI 与本地共用） ----------
+import shutil
+import subprocess
+
+node = shutil.which("node")
+if node:
+    js_files = [ROOT / "script.js", ROOT / "sync.js"]
+    nf = ROOT / "node-functions"
+    if nf.exists():
+        js_files += sorted(nf.rglob("*.js"))
+    for f in js_files:
+        proc = subprocess.run([node, "--check", str(f)],
+                              capture_output=True, text=True)
+        if proc.returncode != 0:
+            errors.append(
+                f"JS 语法错误 {f.relative_to(ROOT)}: {proc.stderr.strip()[:200]}")
+else:
+    warnings.append("node 未安装，跳过 JS 语法校验")
 
 # ---------- 汇总 ----------
 for w in warnings:

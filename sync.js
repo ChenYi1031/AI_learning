@@ -20,6 +20,7 @@
   var DIRTY_KEY = "sync_dirty";
   var OFFSET_KEY = "sync_clock_offset";
   var MAX_EVENTS = 5000;
+  var MAX_ROWS = 200; // 单次上推行数上限（与服务端一致）
 
   var state = "init"; // init | pulling | ready | syncing | offline
   var listeners = [];
