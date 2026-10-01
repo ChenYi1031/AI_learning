@@ -4,3 +4,4 @@ tools/__pycache__/
 
 # 本地环境变量（含 Turso 密钥，绝不提交）
 .env
+.zcode/

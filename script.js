@@ -543,6 +543,157 @@
     return e;
   }
 
+  /* ---------- 学习统计（热力图/掌握度/连续天数） ---------- */
+  function dayKey(ts) {
+    var d = new Date(ts);
+    return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+  }
+
+  function eventsByDay() {
+    var byDay = {};
+    (Sync.getEvents ? Sync.getEvents() : []).forEach(function (e) {
+      if (!e || !e.ts) return;
+      var k = dayKey(e.ts);
+      byDay[k] = (byDay[k] || 0) + 1;
+    });
+    return byDay;
+  }
+
+  function streakDays(byDay) {
+    var streak = 0;
+    var cur = new Date();
+    if (!byDay[dayKey(cur.getTime())]) cur.setDate(cur.getDate() - 1); // 今天还没学从昨天算
+    while (byDay[dayKey(cur.getTime())]) {
+      streak++;
+      cur.setDate(cur.getDate() - 1);
+    }
+    return streak;
+  }
+
+  function heatmapLevel(n) {
+    if (!n) return 0;
+    if (n <= 2) return 1;
+    if (n <= 5) return 2;
+    if (n <= 9) return 3;
+    return 4;
+  }
+
+  function renderStatsHost() {
+    var host = document.createElement("div");
+    host.className = "stats-host";
+
+    var byDay = eventsByDay();
+    var total = 0;
+    Object.keys(byDay).forEach(function (k) { total += byDay[k]; });
+    var streak = streakDays(byDay);
+
+    var head = rvEl("div", "stats-head");
+    head.appendChild(rvEl("strong", null, "📊 学习统计"));
+    head.appendChild(rvEl("span", "stats-sub",
+      "近 12 周复习 " + total + " 次 · 连续打卡 " + streak + " 天"));
+    host.appendChild(head);
+
+    // 热力图：84 天（12 周）线性序列，今天结尾
+    var heat = rvEl("div", "heatmap");
+    var start = new Date();
+    start.setDate(start.getDate() - 83);
+    for (var i = 0; i < 84; i++) {
+      var day = new Date(start);
+      day.setDate(start.getDate() + i);
+      var lv = heatmapLevel(byDay[dayKey(day.getTime())] || 0);
+      var cell = rvEl("span", "hm-cell lv" + lv);
+      cell.title = (day.getMonth() + 1) + "月" + day.getDate() + "日 · " +
+        (byDay[dayKey(day.getTime())] || 0) + " 次";
+      heat.appendChild(cell);
+    }
+    host.appendChild(heat);
+
+    // 分类掌握度：各分类的盒子分布堆叠条
+    var byCat = {};
+    concepts.forEach(function (c) {
+      if (!byCat[c.category]) {
+        byCat[c.category] = { total: 0, boxes: [0, 0, 0, 0, 0, 0] };
+      }
+      byCat[c.category].total++;
+      var b = (prog[c.id] && prog[c.id].box) || 0;
+      byCat[c.category].boxes[b]++;
+    });
+    var mastery = rvEl("div", "mastery");
+    Object.keys(byCat).forEach(function (cat) {
+      var info = byCat[cat];
+      var row = rvEl("div", "mastery-row");
+      row.appendChild(rvEl("span", "mastery-cat", cat));
+      var bar = rvEl("div", "mastery-bar");
+      for (var b = 0; b <= 5; b++) {
+        if (!info.boxes[b]) continue;
+        var seg = rvEl("span", "mastery-seg box" + b);
+        seg.style.width = (info.boxes[b] / info.total * 100) + "%";
+        seg.title = cat + " · " + (b === 0 ? "未学" : "第" + b + "级") +
+          "：" + info.boxes[b] + " 个";
+        bar.appendChild(seg);
+      }
+      row.appendChild(bar);
+      row.appendChild(rvEl("span", "mastery-num",
+        info.boxes.slice(1).reduce(function (a, x) { return a + x; }, 0) + "/" + info.total));
+      mastery.appendChild(row);
+    });
+    host.appendChild(mastery);
+
+    var legend = rvEl("div", "stats-legend");
+    legend.appendChild(rvEl("span", null, "少"));
+    for (var l = 0; l <= 4; l++) legend.appendChild(rvEl("span", "hm-cell lv" + l));
+    legend.appendChild(rvEl("span", null, "多"));
+    legend.appendChild(rvEl("span", "lg-gap", "|"));
+    legend.appendChild(rvEl("span", "hm-cell box0", "未"));
+    for (var b2 = 1; b2 <= 5; b2++) legend.appendChild(rvEl("span", "hm-cell box" + b2, b2));
+    legend.appendChild(rvEl("span", null, "掌握等级"));
+    host.appendChild(legend);
+    return host;
+  }
+
+  /* ---------- 数据导出 / 导入 ---------- */
+  function exportProgressFile() {
+    var data = Sync.exportData ? Sync.exportData() : { progress: prog, events: [] };
+    var payload = JSON.stringify({
+      version: 1,
+      exported_at: new Date().toISOString(),
+      app: "AI_learning",
+      progress: data.progress,
+      events: data.events,
+    }, null, 2);
+    var blob = new Blob([payload], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "ai-learning-progress-" +
+      new Date().toISOString().slice(0, 10) + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function importProgressFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var data = JSON.parse(reader.result);
+        if (!data || typeof data !== "object" || !data.progress) {
+          throw new Error("格式不正确");
+        }
+        var res = Sync.importData
+          ? Sync.importData(data)
+          : { rows: 0, events: 0 };
+        prog = loadProg();
+        updateLearnedBadge();
+        render();
+        renderReview();
+        alert("导入完成：合并 " + res.rows + " 条进度、" + res.events + " 条复习记录" +
+          (Sync ? "，待同步后上传云端" : ""));
+      } catch (e) {
+        alert("导入失败：" + e.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
   function renderReview() {
     reviewView.innerHTML = "";
     var L = learnedCount();
@@ -554,6 +705,7 @@
 
     var card = review.queue[review.idx];
     if (!card) {
+      reviewView.appendChild(renderStatsHost());
       var done = rvEl("div", "review-done");
       if (review.queue.length || review.yes + review.no > 0) {
         done.appendChild(rvEl("div", "rd-icon", "🎉"));
@@ -573,8 +725,30 @@
       start.addEventListener("click", startReview);
       done.appendChild(start);
       var tip = rvEl("p", "rd-tip",
-        "进度保存在本浏览器（localStorage），复习间隔 1/3/7/14/30 天逐级拉长");
+        "进度保存在本浏览器并云同步（离线时暂存本地），复习间隔 1/3/7/14/30 天逐级拉长");
       done.appendChild(tip);
+
+      var tools = rvEl("div", "rv-tools");
+      var expBtn = rvEl("button", "rv-btn ghost", "⬇️ 导出数据");
+      expBtn.addEventListener("click", exportProgressFile);
+      var impBtn = rvEl("button", "rv-btn ghost", "⬆️ 导入数据");
+      var fileInput = rvEl("input");
+      fileInput.type = "file";
+      fileInput.accept = "application/json,.json";
+      fileInput.className = "rv-file";
+      fileInput.addEventListener("change", function () {
+        if (fileInput.files && fileInput.files[0]) {
+          importProgressFile(fileInput.files[0]);
+          fileInput.value = "";
+        }
+      });
+      impBtn.addEventListener("click", function () {
+        fileInput.click();
+      });
+      tools.appendChild(expBtn);
+      tools.appendChild(impBtn);
+      tools.appendChild(fileInput);
+      done.appendChild(tools);
       reviewView.appendChild(done);
       return;
     }

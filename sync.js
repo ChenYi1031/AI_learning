@@ -405,6 +405,7 @@
     markDirty: markDirty,
     logEvent: logEvent,
     onStatus: onStatus,
+    getEvents: function () { return loadEvents(); },
     exportData: exportData,
     importData: importData,
     statusInfo: statusInfo,
